@@ -93,6 +93,7 @@ def list_devices(db: Session = Depends(get_session)):
             "last_ip": d.last_ip,
             "hostname": d.hostname,
             "is_manual": d.is_manual,
+            "archived": d.archived,
             "pinned_fields": json.loads(d.pinned_fields) if d.pinned_fields else [],
             "active_session_id": active_session.id if active_session else None,
             "latest": _snapshot_dict(latest) if latest else None,
@@ -127,6 +128,7 @@ def get_device(mac: str, db: Session = Depends(get_session)):
         "last_ip": device.last_ip,
         "hostname": device.hostname,
         "is_manual": device.is_manual,
+        "archived": device.archived,
         "pinned_fields": json.loads(device.pinned_fields) if device.pinned_fields else [],
         "active_session_id": active_session.id if active_session else None,
         "latest": _snapshot_dict(latest) if latest else None,
@@ -188,6 +190,28 @@ def delete_device(mac: str, db: Session = Depends(get_session)):
     db.delete(device)
     db.commit()
     return {"ok": True}
+
+
+@app.post("/api/devices/{mac}/archive")
+def archive_device(mac: str, db: Session = Depends(get_session)):
+    mac = mac.upper()
+    device = db.get(Device, mac)
+    if not device:
+        raise HTTPException(404)
+    device.archived = True
+    db.commit()
+    return {"ok": True, "archived": True}
+
+
+@app.post("/api/devices/{mac}/unarchive")
+def unarchive_device(mac: str, db: Session = Depends(get_session)):
+    mac = mac.upper()
+    device = db.get(Device, mac)
+    if not device:
+        raise HTTPException(404)
+    device.archived = False
+    db.commit()
+    return {"ok": True, "archived": False}
 
 
 # ── Metrics ───────────────────────────────────────────────────────────────────

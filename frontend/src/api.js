@@ -25,6 +25,8 @@ export const api = {
   updateDevice: (mac, body) => req('PATCH', `/devices/${mac}`, body),
   addDevice: (ip) => req('POST', '/devices/add', { ip }),
   deleteDevice: (mac) => req('DELETE', `/devices/${mac}`),
+  archiveDevice: (mac) => req('POST', `/devices/${mac}/archive`),
+  unarchiveDevice: (mac) => req('POST', `/devices/${mac}/unarchive`),
   identifyDevice: (mac) => req('POST', `/devices/${mac}/identify`),
 
   // Metrics

@@ -221,7 +221,12 @@ export default function DeviceDetail() {
               <InfoCell label="ASIC" value={device.asic_model || '—'} />
               <InfoCell label="Chips" value={device.asic_count || '—'} />
               <InfoCell label="Firmware" value={device.firmware_version || '—'} />
-              <InfoCell label="IP" value={device.last_ip || '—'} mono />
+              <InfoCell label="IP" value={
+                device.last_ip
+                  ? <a href={`http://${device.last_ip}`} target="_blank" rel="noreferrer"
+                      style={{ color: theme.accent, fontFamily: 'monospace', fontSize: 12 }}>{device.last_ip} ↗</a>
+                  : '—'
+              } />
             </div>
             <div style={{ borderTop: `0.5px solid ${theme.border}`, marginTop: 12, paddingTop: 10 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>

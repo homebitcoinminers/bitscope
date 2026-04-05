@@ -19,6 +19,7 @@ class Device(SQLModel, table=True):
     hostname: Optional[str] = None
     firmware_version: Optional[str] = None
     is_manual: bool = False              # true = manually added
+    archived: bool = False               # manually archived by user
     pinned_fields: Optional[str] = None  # JSON array of extra field names to show
 
 
