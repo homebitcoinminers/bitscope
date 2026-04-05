@@ -385,7 +385,7 @@ def fleet_stats(db: Session = Depends(get_session)):
     total_hashrate = 0.0
     total_power = 0.0
     active_sessions = 0
-    cutoff = datetime.utcnow() - timedelta(minutes=2)
+    cutoff = datetime.utcnow() - timedelta(minutes=3)
 
     for d in devices:
         latest = db.exec(

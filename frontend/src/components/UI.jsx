@@ -99,6 +99,15 @@ export function EmptyState({ icon = '📭', title, sub }) {
   )
 }
 
+export function formatDate(ts, includeTime = true) {
+  if (!ts) return '—'
+  const tz = window.__bsTz === 'utc' ? 'UTC' : undefined
+  const opts = includeTime
+    ? { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: tz }
+    : { year: 'numeric', month: 'short', day: 'numeric', timeZone: tz }
+  return new Date(ts).toLocaleString(undefined, opts)
+}
+
 export function formatHashrate(gh) {
   if (gh == null) return '—'
   if (gh >= 1000) return `${(gh / 1000).toFixed(2)} TH/s`

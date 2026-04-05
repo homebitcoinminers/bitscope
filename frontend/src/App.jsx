@@ -88,10 +88,17 @@ function Sidebar() {
   const { theme, themeName, cycleTheme } = useContext(ThemeContext)
   const [discordEnabled, setDiscordEnabled] = useState(true)
   const [loadingDiscord, setLoadingDiscord] = useState(false)
+  const [tz, setTz] = useState(() => localStorage.getItem('bs-tz') || 'local')
 
   useEffect(() => {
     api.settings().then(s => setDiscordEnabled(s.discord_enabled)).catch(() => {})
   }, [])
+
+  // Expose tz globally so other components can use it
+  useEffect(() => {
+    window.__bsTz = tz
+    localStorage.setItem('bs-tz', tz)
+  }, [tz])
 
   const toggleDiscord = async () => {
     setLoadingDiscord(true)
@@ -179,6 +186,16 @@ function Sidebar() {
               display: 'block',
             }} />
           </button>
+        </div>
+
+        {/* Timezone toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 11, color: theme.muted }}>🕐 Timezone</span>
+          <button onClick={() => setTz(t => t === 'local' ? 'utc' : 'local')} style={{
+            fontSize: 10, padding: '2px 8px', borderRadius: 4,
+            border: `0.5px solid ${theme.border}`,
+            background: 'transparent', color: theme.muted, cursor: 'pointer',
+          }}>{tz === 'local' ? 'Local' : 'UTC'}</button>
         </div>
 
         {/* Theme toggle */}
