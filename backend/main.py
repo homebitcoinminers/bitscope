@@ -52,6 +52,7 @@ from models import (
 from scanner import scan_and_discover, poll_all_devices, upsert_device, fetch_device_info, get_discord_enabled, set_discord_enabled
 import nonce_tracker
 from nonce_tracker import get_nonce_stats, get_nonce_history, send_daily_digest
+import profiles as profile_store
 import aiohttp
 
 def isoZ(dt):
@@ -929,6 +930,66 @@ def get_logs(limit: int = 200, level: str = "ALL"):
     if level != "ALL":
         logs = [l for l in logs if l["level"] == level]
     return list(reversed(logs[-limit:]))
+
+
+# ── Profiles ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/profiles")
+def list_profiles():
+    return profile_store.list_profiles()
+
+
+@app.get("/api/profiles/{profile_id}")
+def get_profile(profile_id: str):
+    p = profile_store.get_profile(profile_id)
+    if not p:
+        raise HTTPException(404, "Profile not found")
+    return p
+
+
+@app.post("/api/profiles/{profile_id}")
+def save_profile(profile_id: str, body: dict):
+    # Sanitise id — alphanumeric + underscores/hyphens only
+    import re
+    clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', profile_id)
+    return profile_store.save_profile(clean_id, body)
+
+
+@app.delete("/api/profiles/{profile_id}")
+def delete_profile(profile_id: str):
+    if profile_id == "hbm_default":
+        raise HTTPException(400, "Cannot delete the default profile")
+    ok = profile_store.delete_profile(profile_id)
+    if not ok:
+        raise HTTPException(404)
+    return {"ok": True}
+
+
+@app.post("/api/devices/{mac}/profiles/capture")
+async def capture_profile_from_device(mac: str, body: dict, db: Session = Depends(get_session)):
+    """Capture current device settings as a new profile."""
+    mac = mac.upper()
+    device = db.get(Device, mac)
+    if not device or not device.last_ip:
+        raise HTTPException(404, "Device not found or no IP")
+    async with aiohttp.ClientSession() as http:
+        try:
+            async with http.get(
+                f"http://{device.last_ip}/api/system/info",
+                timeout=aiohttp.ClientTimeout(total=8),
+                headers={"Host": device.last_ip},
+            ) as resp:
+                if resp.status != 200:
+                    raise HTTPException(502, "Could not reach device")
+                raw = await resp.json(content_type=None)
+        except Exception as e:
+            raise HTTPException(502, str(e))
+
+    name = body.get("name") or f"{device.label or device.hostname or mac} settings"
+    profile_id = re.sub(r'[^a-zA-Z0-9_-]', '_', name.lower().replace(' ', '_'))
+    import re
+    p = profile_store.profile_from_device_snapshot(raw, name)
+    return profile_store.save_profile(profile_id, p)
 
 
 # ── Settings ──────────────────────────────────────────────────────────────────

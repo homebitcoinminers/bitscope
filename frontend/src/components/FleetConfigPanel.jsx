@@ -24,14 +24,12 @@ function TInput({ value, onChange, placeholder, mono, type = 'text' }) {
 function Toggle({ value, onChange, label }) {
   const theme = useTheme()
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-      <div style={{ position: 'relative', width: 36, height: 20, flexShrink: 0 }} onClick={() => onChange(!value)}>
-        <div style={{ position: 'absolute', inset: 0, borderRadius: 10, background: value ? '#22c55e' : theme.border, transition: 'background 0.2s', cursor: 'pointer' }}>
-          <div style={{ position: 'absolute', top: 2, left: value ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
-        </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => onChange(!value)}>
+      <div style={{ position: 'relative', width: 36, height: 20, flexShrink: 0, borderRadius: 10, background: value ? '#22c55e' : theme.border, transition: 'background 0.2s', cursor: 'pointer' }}>
+        <div style={{ position: 'absolute', top: 2, left: value ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
       </div>
-      {label && <span style={{ fontSize: 12, color: theme.text }}>{label}</span>}
-    </label>
+      {label && <span style={{ fontSize: 12, color: theme.text, userSelect: 'none' }}>{label}</span>}
+    </div>
   )
 }
 
@@ -43,10 +41,16 @@ export default function FleetConfigPanel({ devices, onClose }) {
   const [step, setStep] = useState('config') // 'config' | 'confirm'
 
   const [pool, setPool] = useState({
-    stratumURL: '', stratumPort: '', stratumUser: '', stratumPassword: '',
-    stratumTLS: false,
-    fallbackStratumURL: '', fallbackStratumPort: '', fallbackStratumUser: '',
-    fallbackStratumPassword: '', fallbackStratumTLS: false,
+    stratumURL: 'pool.homebitcoinminers.au',
+    stratumPort: '4333',
+    stratumUser: 'bc1qd2gz9h8zwh2stga6lrfh95p8c5w3qc96w2g57c.hbm',
+    stratumPassword: 'x',
+    stratumTLS: true,
+    fallbackStratumURL: 'ausolo.ckpool.org',
+    fallbackStratumPort: '3333',
+    fallbackStratumUser: 'bc1qd2gz9h8zwh2stga6lrfh95p8c5w3qc96w2g57c.hbm',
+    fallbackStratumPassword: 'x',
+    fallbackStratumTLS: false,
     restart: true,
   })
 

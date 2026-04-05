@@ -87,6 +87,30 @@ def process_poll(
     alerts = []
     now = datetime.utcnow()
 
+    # ── Suppress nonces during startup / after tuning changes ────────────────
+    # If device uptime < 5 minutes, nonces are likely boot artefacts
+    if snapshot.uptime_seconds is not None and snapshot.uptime_seconds < 300:
+        logger.info(f"[nonce] {mac} suppressing — uptime {snapshot.uptime_seconds}s < 5min")
+        _last_counter[mac] = raw  # still track counter so delta is correct when suppression lifts
+        return []
+
+    # If a tuning change was logged in the last 10 minutes, suppress
+    from datetime import datetime, timedelta
+    from sqlmodel import select as sql_select
+    from models import AlertLog
+    with Session(engine) as chk_db:
+        recent_tune = chk_db.exec(
+            sql_select(AlertLog).where(
+                AlertLog.mac == mac,
+                AlertLog.alert_type == "tuning_change",
+                AlertLog.ts >= datetime.utcnow() - timedelta(minutes=10),
+            )
+        ).first()
+    if recent_tune:
+        logger.info(f"[nonce] {mac} suppressing — tuning change within 10min")
+        _last_counter[mac] = raw
+        return []
+
     # ── Calculate delta ───────────────────────────────────────────────────────
     last = _last_counter.get(mac)
     if last is None:

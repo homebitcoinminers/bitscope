@@ -7,6 +7,7 @@ import Alerts from './pages/Alerts.jsx'
 import Scanner from './pages/Scanner.jsx'
 import Thresholds from './pages/Thresholds.jsx'
 import Logs from './pages/Logs.jsx'
+import Profiles from './pages/Profiles.jsx'
 import { api } from './api.js'
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -45,6 +46,7 @@ const NAV = [
   { to: '/sessions', label: 'Sessions', icon: ChartIcon },
   { to: '/alerts', label: 'Alerts', icon: BellIcon },
   { to: '/scanner', label: 'Scanner', icon: RadarIcon },
+  { to: '/profiles', label: 'Profiles', icon: ProfileIcon },
   { to: '/thresholds', label: 'Thresholds', icon: SliderIcon },
   { to: '/logs', label: 'Logs', icon: TerminalIcon },
 ]
@@ -79,6 +81,7 @@ export default function App() {
               <Route path="/scanner" element={<Scanner />} />
               <Route path="/thresholds" element={<Thresholds />} />
               <Route path="/logs" element={<Logs />} />
+              <Route path="/profiles" element={<Profiles />} />
             </Routes>
           </main>
         </div>
@@ -284,6 +287,9 @@ function SliderIcon({ size = 14 }) {
 }
 function ShieldIcon({ size = 16, color = 'currentColor' }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill={color}><path d="M8 1L2 4v4c0 3.5 2.5 6.5 6 7.5 3.5-1 6-4 6-7.5V4L8 1z"/></svg>
+}
+function ProfileIcon({ size = 14 }) {
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path d="M4 2h8a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1zm1 3h6M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
 }
 function TerminalIcon({ size = 14 }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path d="M1 2h14a1 1 0 011 1v10a1 1 0 01-1 1H1a1 1 0 01-1-1V3a1 1 0 011-1zm2 8l3-3-3-3m4 6h4"/><path d="M3 7l2.5 2.5L3 12M8 12h5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>

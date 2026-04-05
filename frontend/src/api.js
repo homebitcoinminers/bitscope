@@ -63,6 +63,13 @@ export const api = {
   deleteSubnet: (id) => req('DELETE', `/scanner/subnets/${id}`),
   triggerScan: () => req('POST', '/scanner/scan'),
 
+  // Profiles
+  profiles: () => req('GET', '/profiles'),
+  getProfile: (id) => req('GET', `/profiles/${id}`),
+  saveProfile: (id, body) => req('POST', `/profiles/${id}`, body),
+  deleteProfile: (id) => req('DELETE', `/profiles/${id}`),
+  captureProfile: (mac, body) => req('POST', `/devices/${mac}/profiles/capture`, body),
+
   // Logs
   logs: (limit = 200, level = 'ALL') => req('GET', `/logs?limit=${limit}&level=${level}`),
 
