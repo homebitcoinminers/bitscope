@@ -1145,7 +1145,7 @@ async def configure_hardware(body: dict, db: Session = Depends(get_session)):
         # Fan settings always apply
         if "autofanspeed" in body:
             payload["autofanspeed"] = 1 if body["autofanspeed"] else 0
-        if not body.get("autofanspeed") and "fanspeed" in body:
+        if "fanspeed" in body:
             payload["fanspeed"] = int(body["fanspeed"])
         if "temptarget" in body:
             payload["temptarget"] = int(body["temptarget"])

@@ -37,6 +37,26 @@ function Inp({ value, onChange, placeholder, mono, type = 'text', style = {} }) 
   )
 }
 
+function PasswordInp({ value, onChange, placeholder }) {
+  const theme = useTheme()
+  const [show, setShow] = useState(false)
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type={show ? 'text' : 'password'}
+        value={value ?? ''}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{ width: '100%', border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '6px 32px 6px 10px', fontSize: 12, background: theme.inputBg, color: theme.text, outline: 'none' }}
+      />
+      <button onClick={() => setShow(s => !s)} style={{
+        position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+        background: 'none', border: 'none', cursor: 'pointer', color: theme.muted, fontSize: 12, padding: 0, lineHeight: 1,
+      }}>{show ? '🙈' : '👁'}</button>
+    </div>
+  )
+}
+
 function SectionTitle({ children }) {
   const theme = useTheme()
   return (
@@ -59,6 +79,8 @@ function PoolCard({ label, dot, fields, values, onChange }) {
           <Field key={f.key} label={f.label}>
             {f.type === 'toggle'
               ? <Toggle value={values[f.key]} onChange={v => onChange(f.key, v)} label={values[f.key] ? 'Enabled' : 'Disabled'} />
+              : f.type === 'password'
+              ? <PasswordInp value={values[f.key]} onChange={v => onChange(f.key, v)} placeholder={f.placeholder} />
               : <Inp value={values[f.key]} onChange={v => onChange(f.key, v)} placeholder={f.placeholder} mono={f.mono} type={f.type || 'text'} />
             }
           </Field>
@@ -199,7 +221,7 @@ export default function Configure() {
 
   // System form
   const [sys, setSys] = useState({
-    hostname_template: '{devicename}_{last4mac}',
+    hostname_template: '{model}-{last4mac}',
     wifi_ssid: '', wifi_password: '',
     displayTimeout: -1, rotation: 0, invertscreen: 0,
     autoscreenoff: 0, statsFrequency: 120, restart: false,
@@ -266,6 +288,7 @@ export default function Configure() {
       setSys(prev => ({ ...prev,
         hostname_template: p.hostname_template || prev.hostname_template,
         wifi_ssid: p.wifi_ssid || prev.wifi_ssid,
+        wifi_password: p.wifi_password || prev.wifi_password,
         displayTimeout: p.displayTimeout ?? prev.displayTimeout,
         rotation: p.rotation ?? prev.rotation,
         statsFrequency: p.statsFrequency ?? prev.statsFrequency,
@@ -351,6 +374,11 @@ export default function Configure() {
         <Btn onClick={saveCurrentAsProfile}>Save current as profile…</Btn>
       </Topbar>
 
+      <div style={{ padding: '8px 16px', background: '#faeeda', borderBottom: `0.5px solid #ef9f27`, display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: '#854f0b' }}>
+        <span style={{ fontWeight: 700, fontSize: 14 }}>⚠️</span>
+        <strong>Experimental</strong> — This page pushes changes directly to devices over the network. Always verify device settings after applying. Incorrect settings can cause connectivity loss. Use with caution.
+      </div>
+
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: 14, gap: 12 }}>
 
         {/* Left nav */}
@@ -390,7 +418,7 @@ export default function Configure() {
                       { key: 'stratumURL', label: 'Pool URL', placeholder: 'pool.homebitcoinminers.au', mono: true },
                       { key: 'stratumPort', label: 'Port', placeholder: '4333' },
                       { key: 'stratumUser', label: 'Worker (wallet.name)', placeholder: 'bc1q…', mono: true },
-                      { key: 'stratumPassword', label: 'Password', placeholder: 'x' },
+                      { key: 'stratumPassword', label: 'Password', placeholder: 'x', type: 'password' },
                       { key: 'stratumTLS', label: 'TLS', type: 'toggle' },
                     ]}
                     values={pool} onChange={(k,v) => setPool(p => ({...p,[k]:v}))} />
@@ -399,7 +427,7 @@ export default function Configure() {
                       { key: 'fallbackStratumURL', label: 'Pool URL', placeholder: 'ausolo.ckpool.org', mono: true },
                       { key: 'fallbackStratumPort', label: 'Port', placeholder: '3333' },
                       { key: 'fallbackStratumUser', label: 'Worker', placeholder: 'bc1q…', mono: true },
-                      { key: 'fallbackStratumPassword', label: 'Password', placeholder: 'x' },
+                      { key: 'fallbackStratumPassword', label: 'Password', placeholder: 'x', type: 'password' },
                       { key: 'fallbackStratumTLS', label: 'TLS', type: 'toggle' },
                     ]}
                     values={pool} onChange={(k,v) => setPool(p => ({...p,[k]:v}))} />
@@ -430,7 +458,7 @@ export default function Configure() {
                   <SectionTitle>📶 WiFi (leave blank to skip)</SectionTitle>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <Field label="SSID"><Inp value={sys.wifi_ssid} onChange={v => setSys(s=>({...s,wifi_ssid:v}))} placeholder="Leave blank to skip" /></Field>
-                    <Field label="Password"><Inp value={sys.wifi_password} onChange={v => setSys(s=>({...s,wifi_password:v}))} placeholder="Leave blank to skip" /></Field>
+                    <Field label="Password"><PasswordInp value={sys.wifi_password} onChange={v => setSys(s=>({...s,wifi_password:v}))} placeholder="Leave blank to skip" /></Field>
                   </div>
 
                   <SectionTitle>🖥️ Display</SectionTitle>
@@ -448,7 +476,7 @@ export default function Configure() {
                 <div>
                   <SectionTitle>🔒 Model lock</SectionTitle>
                   <Field label="Apply only to this model" desc="Hardware profiles are model-specific — devices of a different model will be blocked">
-                    <select value={hw.model_lock || ''} onChange={e => setHw(h=>({...h,model_lock:e.target.value||null}))}
+                    <select value={hw.model_lock || ''} onChange={e => { const m = e.target.value || null; setHw(h=>({...h,model_lock:m})); if (m) setSelected(new Set(devices.filter(d => d.model === m && !d.archived).map(d => d.mac))) }}
                       style={{ width: '100%', border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '6px 10px', fontSize: 12, background: theme.inputBg, color: theme.text }}>
                       <option value="">No lock (any model)</option>
                       {[...new Set(devices.map(d=>d.model).filter(Boolean))].map(m => <option key={m} value={m}>{m}</option>)}

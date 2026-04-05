@@ -1,5 +1,20 @@
 # BitScope Changelog
 
+## v0.5.1 — 2026-04-05
+
+### Fixed
+- **WiFi password not pulling from profile** — `wifi_password` was missing from the `applyProfile()` merge for system profiles
+- **Fan speed not applying** — `fanspeed` was only sent in the payload when `autofanspeed` was false, but the condition check was wrong. Now always included in the payload alongside `autofanspeed`
+- **Model lock didn't auto-filter devices** — selecting a model lock now immediately filters the device selector to only show devices of that model (deselects incompatible ones automatically)
+- **Hostname template `{devicename}` ambiguity** — removed `{devicename}` token (was using the device's current hostname which is confusing). Default template changed to `{model}-{last4mac}` (e.g. `NerdQAxeplus-b220`). Available tokens: `{model}`, `{last4mac}`, `{hostname}`, `{mac}`
+- **Model name in hostname** — `NerdQAxe++` now sanitises to `NerdQAxeplus` (no special chars), `NerdOCTAxe-y` remains `NerdOCTAxe-y`. Double dashes collapsed.
+- **Password fields now masked** — pool passwords, fallback passwords, and WiFi password all use masked input with 👁 show/hide toggle in Configure and Profiles pages
+
+### Added
+- **Experimental banner** — amber warning banner at top of Configure page explaining the page pushes live changes to devices
+
+---
+
 ## v0.5.0 — 2026-04-05
 
 ### Added — Configure page (major rework)

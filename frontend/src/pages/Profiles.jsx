@@ -1,6 +1,19 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { api } from '../api.js'
 import { PageWrap, Topbar, Card, Btn, useTheme, Badge } from '../components/UI.jsx'
+
+function PasswordInp({ value, onChange, placeholder, style = {} }) {
+  const theme = useTheme()
+  const [show, setShow] = React.useState(false)
+  return (
+    <div style={{ position: 'relative' }}>
+      <input type={show ? 'text' : 'password'} value={value ?? ''} onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{ width: '100%', border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '5px 32px 5px 10px', fontSize: 12, background: theme.inputBg, color: theme.text, outline: 'none', ...style }} />
+      <button onClick={() => setShow(s => !s)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: theme.muted, fontSize: 12, padding: 0 }}>{show ? '🙈' : '👁'}</button>
+    </div>
+  )
+}
 
 const TYPE_LABELS = {
   pool:     { label: 'Pool',     color: '#185fa5', desc: 'Pool, fallback pool, worker, TLS' },
@@ -49,7 +62,7 @@ export default function Profiles() {
         fallbackStratumUser: 'bc1qd2gz9h8zwh2stga6lrfh95p8c5w3qc96w2g57c.hbm',
         fallbackStratumPassword: 'x', fallbackStratumTLS: false },
       system: { _id: `sys_${Date.now()}`, type: 'system', name: 'New system profile',
-        hostname_template: '{devicename}_{last4mac}', wifi_ssid: '', wifi_password: '',
+        hostname_template: '{model}-{last4mac}', wifi_ssid: '', wifi_password: '',
         displayTimeout: -1, rotation: 0, invertscreen: 0, statsFrequency: 120 },
       hardware: { _id: `hw_${Date.now()}`, type: 'hardware', name: 'New hardware profile',
         model_lock: '', autofanspeed: false, fanspeed: 100, temptarget: 60,
@@ -90,7 +103,7 @@ export default function Profiles() {
         <F label="URL"><input value={form[`${prefix}URL`] || ''} onChange={e => sp(`${prefix}URL`)(e.target.value)} style={inp} /></F>
         <F label="Port"><input type="number" value={form[`${prefix}Port`] || ''} onChange={e => sp(`${prefix}Port`)(Number(e.target.value))} style={inp} /></F>
         <F label="Worker"><input value={form[`${prefix}User`] || ''} onChange={e => sp(`${prefix}User`)(e.target.value)} style={{ ...inp, fontFamily: 'monospace', fontSize: 11 }} /></F>
-        <F label="Password"><input value={form[`${prefix}Password`] || ''} onChange={e => sp(`${prefix}Password`)(e.target.value)} style={inp} placeholder="x" /></F>
+        <F label="Password"><PasswordInp value={form[`${prefix}Password`] || ''} onChange={sp(`${prefix}Password`)} placeholder="x" /></F>
         <F label="TLS"><Tog k={`${prefix}TLS`} /></F>
       </div>
     </div>

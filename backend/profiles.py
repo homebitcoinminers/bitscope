@@ -42,7 +42,7 @@ DEFAULTS = {
         "name": "HBM System Default",
         "description": "Default system settings — display always on, stats logging enabled",
         "is_default": True,
-        "hostname_template": "{devicename}_{last4mac}",
+        "hostname_template": "{model}-{last4mac}",
         "wifi_ssid": "",
         "wifi_password": "",
         "displayTimeout": -1,
@@ -150,26 +150,28 @@ def delete_profile(profile_type: str, profile_id: str) -> bool:
 
 def apply_hostname_template(template: str, device: dict) -> str:
     """Resolve hostname template tokens for a specific device."""
+    import re
     mac = device.get("mac", "")
     last4 = mac.replace(":", "")[-4:].lower() if mac else "0000"
     hostname = device.get("hostname", "") or ""
     model = device.get("model", "") or ""
-    # Sanitise model for use in hostname (alphanumeric + hyphens only)
-    import re
-    model_clean = re.sub(r'[^a-zA-Z0-9-]', '', model.replace('+', 'plus').replace(' ', '-'))
-    devicename = re.sub(r'[^a-zA-Z0-9-]', '', hostname.replace('_', '-'))
+
+    # Sanitise model: remove ++, special chars, collapse multiple dashes
+    # e.g. "NerdQAxe++" -> "NerdQAxeplus", "NerdOCTAxe-y" -> "NerdOCTAxe-y"
+    model_clean = model.replace("++", "plus").replace("+", "plus")
+    model_clean = re.sub(r"[^a-zA-Z0-9-]", "", model_clean)
+    model_clean = re.sub(r"-+", "-", model_clean).strip("-")  # collapse/trim dashes
 
     result = template
     result = result.replace("{last4mac}", last4)
     result = result.replace("{hostname}", hostname or "device")
-    result = result.replace("{devicename}", devicename or "device")
     result = result.replace("{model}", model_clean or "miner")
     result = result.replace("{mac}", mac.replace(":", "").lower())
 
-    # Ensure valid hostname (lowercase, max 32 chars, no leading/trailing hyphens)
+    # Ensure valid hostname: lowercase, alphanumeric + hyphens, max 32 chars
     result = result.lower()
-    result = re.sub(r'[^a-z0-9-_]', '', result)
-    result = result.strip('-_')
+    result = re.sub(r"[^a-z0-9-]", "-", result)
+    result = re.sub(r"-+", "-", result).strip("-")
     return result[:32] or "bitaxe"
 
 
@@ -203,7 +205,7 @@ def capture_from_snapshot(raw: dict, profile_type: str, name: str) -> dict:
             "type": "system",
             "name": name,
             "description": f"Captured from {hostname} on {now[:10]}",
-            "hostname_template": hostname,
+            "hostname_template": "{model}-{last4mac}",
             "wifi_ssid": "",
             "wifi_password": "",
             "displayTimeout": raw.get("displayTimeout", -1),
