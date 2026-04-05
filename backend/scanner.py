@@ -328,12 +328,15 @@ async def send_discord_alert(alert: AlertLog, device: Device, resolved: bool = F
     label = device.label or device.hostname or device.mac
     color = 0x44BB44 if resolved else colors.get(alert.alert_type, 0x888888)
     title = f"✅ Resolved — {label}" if resolved else f"⚠️ Alert — {label}"
+    model_str = device.model or "Unknown model"
 
     payload = {"embeds": [{"title": title, "description": alert.message, "color": color,
         "fields": [
             {"name": "Device", "value": label, "inline": True},
+            {"name": "Model", "value": model_str, "inline": True},
             {"name": "MAC", "value": device.mac, "inline": True},
             {"name": "Type", "value": alert.alert_type.replace("_", " ").title(), "inline": True},
+            {"name": "IP", "value": device.last_ip or "unknown", "inline": True},
         ],
         "timestamp": datetime.utcnow().isoformat(),
     }]}

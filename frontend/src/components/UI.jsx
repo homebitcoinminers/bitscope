@@ -101,8 +101,7 @@ export function EmptyState({ icon = '📭', title, sub }) {
 
 export function formatDate(ts, includeTime = true) {
   if (!ts) return '—'
-  const tz = window.__bsTz
-  const timeZone = (!tz || tz === 'local') ? undefined : tz
+  const timeZone = window.__bsTz === 'UTC' ? 'UTC' : undefined
   const opts = includeTime
     ? { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone }
     : { year: 'numeric', month: 'short', day: 'numeric', timeZone }
