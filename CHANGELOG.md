@@ -1,5 +1,17 @@
 # BitScope Changelog
 
+## v0.5.2 — 2026-04-05
+
+### Fixed
+- **Input focus loss when typing** — root cause: `Tog`, `F`, `PoolSection`, `Row` components were defined *inside* the `Profiles()` and `Configure()` function bodies. Every keystroke triggered a re-render which recreated those function references, causing React to unmount and remount the inputs (losing focus after each character). Fixed by moving all sub-components to module level outside the parent component
+- **Fan speed not applying** — `fanspeed` payload was conditionally excluded. Now always sent alongside `autofanspeed`
+- **Second apply failing** — errors now caught in try/catch and shown in ResultPanel instead of crashing the apply function state
+- **Confirmation missing full change list** — `ChangeTable` component added showing all settings being applied (pool URL, ports, workers, TLS, fan, freq, voltage, restart etc.) before confirming
+- **IP not visible in device selector** — now shows last two octets (e.g. `60.13`) below device name. Devices with no IP show `no IP` with a ⚠ warning icon and are excluded from default selection
+- **Model lock not deselecting incompatible devices** — fixed in v0.5.1 but also now applied when loading a hardware profile that has a model_lock
+
+---
+
 ## v0.5.1 — 2026-04-05
 
 ### Fixed
