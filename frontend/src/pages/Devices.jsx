@@ -45,6 +45,8 @@ export default function Devices() {
   const [visibleCols, setVisibleCols] = useState(loadCols)
   const [showColPicker, setShowColPicker] = useState(false)
   const [showExport, setShowExport] = useState(false)
+  const [search, setSearch]           = useState('')
+  const [showArchived, setShowArchived] = useState(false)
   const [expandedStat, setExpandedStat] = useState(null)
   const [exportFrom, setExportFrom] = useState('')
   const [exportTo, setExportTo]     = useState('')
@@ -99,6 +101,27 @@ export default function Devices() {
 
   const isOnline = d => d.last_seen && (Date.now() - new Date(d.last_seen).getTime()) / 1000 < 180
 
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+
+  const isArchived = d => {
+    if (!d.last_seen) return true
+    const age = Date.now() - new Date(d.last_seen).getTime()
+    return !isOnline(d) && age > WEEK_MS
+  }
+
+  const matchesSearch = d => {
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    return (
+      (d.mac || '').toLowerCase().includes(q) ||
+      (d.label || '').toLowerCase().includes(q) ||
+      (d.hostname || '').toLowerCase().includes(q) ||
+      (d.model || '').toLowerCase().includes(q) ||
+      (d.last_ip || '').toLowerCase().includes(q) ||
+      (d.firmware_version || '').toLowerCase().includes(q)
+    )
+  }
+
   const getValue = (d, key) => {
     const l = d.latest
     switch (key) {
@@ -124,6 +147,16 @@ export default function Devices() {
     const cmp = typeof av === 'string' ? av.localeCompare(bv) : av - bv
     return sortDir === 'asc' ? cmp : -cmp
   })
+
+  // Filter: search query + archived visibility
+  const visibleDevices = sorted.filter(d => {
+    if (!matchesSearch(d)) return false
+    if (isArchived(d) && !showArchived && !search.trim()) return false
+    return true
+  })
+
+  const archivedCount = devices.filter(d => isArchived(d) && !matchesSearch(d) || isArchived(d)).length
+  const hiddenCount = devices.filter(d => isArchived(d) && !showArchived && !search.trim()).length
 
   const orderedCols = ALL_COLS.filter(c => visibleCols.includes(c.key))
 
@@ -189,10 +222,52 @@ export default function Devices() {
           color={expandedStat === 'hashrate' ? '#185fa5' : expandedStat === 'power' ? '#9333ea' : '#1d9e75'} />
         )}
 
-        {/* View controls */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ fontWeight: 500, fontSize: 13, color: theme.text }}>All devices</div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {/* View controls + search */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+            <div style={{ fontWeight: 500, fontSize: 13, color: theme.text, flexShrink: 0 }}>All devices</div>
+
+            {/* Search */}
+            <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
+              <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: theme.faint, fontSize: 13, pointerEvents: 'none' }}>🔍</span>
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search name, MAC, model, IP…"
+                style={{
+                  width: '100%', border: `0.5px solid ${theme.border}`, borderRadius: 6,
+                  padding: '5px 10px 5px 28px', fontSize: 12,
+                  background: theme.inputBg, color: theme.text, outline: 'none',
+                }}
+              />
+              {search && (
+                <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+              )}
+            </div>
+
+            {/* Archived toggle */}
+            {!search && (
+              <button
+                onClick={() => setShowArchived(v => !v)}
+                style={{
+                  fontSize: 11, padding: '4px 10px', borderRadius: 5,
+                  border: `0.5px solid ${showArchived ? theme.accent : theme.border}`,
+                  background: showArchived ? `${theme.accent}18` : 'transparent',
+                  color: showArchived ? theme.accent : theme.muted,
+                  cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                }}
+              >
+                {showArchived ? '✓ Showing archived' : `Show archived${hiddenCount > 0 ? ` (${hiddenCount})` : ''}`}
+              </button>
+            )}
+
+            {search && (
+              <div style={{ fontSize: 11, color: theme.muted, flexShrink: 0 }}>
+                {visibleDevices.length} result{visibleDevices.length !== 1 ? 's' : ''} — searching all devices incl. archived
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
             {view === 'table' && (
               <div style={{ position: 'relative' }}>
                 <Btn onClick={() => setShowColPicker(v => !v)}>Columns ▾</Btn>
@@ -220,18 +295,22 @@ export default function Devices() {
           </div>
         </div>
 
-        {sorted.length === 0 ? (
+        {visibleDevices.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem', color: theme.muted }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
-            <div style={{ fontWeight: 500, color: theme.text }}>No devices yet</div>
-            <div style={{ fontSize: 12, marginTop: 4 }}>Click "Scan now" or add a device by IP</div>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>{search ? '🔍' : devices.length > 0 ? '📦' : '📡'}</div>
+            <div style={{ fontWeight: 500, color: theme.text }}>
+              {search ? `No devices match "${search}"` : devices.length > 0 ? `${hiddenCount} archived device${hiddenCount !== 1 ? 's' : ''} hidden` : 'No devices yet'}
+            </div>
+            <div style={{ fontSize: 12, marginTop: 4, color: theme.muted }}>
+              {search ? 'Try searching by MAC address, name, or model' : devices.length > 0 ? <button onClick={() => setShowArchived(true)} style={{ background: 'none', border: 'none', color: theme.accent, cursor: 'pointer', fontSize: 12 }}>Show archived devices</button> : 'Click "Scan now" or add a device by IP'}
+            </div>
           </div>
         ) : view === 'table' ? (
-          <DeviceTable devices={sorted} cols={orderedCols} sortKey={sortKey} sortDir={sortDir}
-            onSort={changeSort} isOnline={isOnline} navigate={navigate} maxTemps={maxTemps} />
+          <DeviceTable devices={visibleDevices} cols={orderedCols} sortKey={sortKey} sortDir={sortDir}
+            onSort={changeSort} isOnline={isOnline} isArchived={isArchived} navigate={navigate} maxTemps={maxTemps} />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
-            {sorted.map(d => <DeviceCard key={d.mac} device={d} online={isOnline(d)} onClick={() => navigate(`/devices/${d.mac}`)} maxTemps={maxTemps} />)}
+            {visibleDevices.map(d => <DeviceCard key={d.mac} device={d} online={isOnline(d)} onClick={() => navigate(`/devices/${d.mac}`)} maxTemps={maxTemps} />)}
           </div>
         )}
       </div>
@@ -283,7 +362,7 @@ function FleetExpandedChart({ data, dataKey, label, color }) {
 
 // ── Table view ────────────────────────────────────────────────────────────────
 
-function DeviceTable({ devices, cols, sortKey, sortDir, onSort, isOnline, navigate, maxTemps }) {
+function DeviceTable({ devices, cols, sortKey, sortDir, onSort, isOnline, isArchived, navigate, maxTemps }) {
   const theme = useTheme()
   const arrow = key => sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''
   const th = { padding: '7px 10px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: theme.muted, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none', borderBottom: `0.5px solid ${theme.border}` }
@@ -347,7 +426,8 @@ function DeviceTable({ devices, cols, sortKey, sortDir, onSort, isOnline, naviga
         </thead>
         <tbody>
           {devices.map(d => (
-            <tr key={d.mac} onClick={() => navigate(`/devices/${d.mac}`)} style={{ cursor: 'pointer' }}
+            <tr key={d.mac} onClick={() => navigate(`/devices/${d.mac}`)}
+              style={{ cursor: 'pointer', opacity: isArchived(d) ? 0.5 : 1 }}
               onMouseEnter={e => e.currentTarget.style.background = theme.statBg}
               onMouseLeave={e => e.currentTarget.style.background = ''}>
               {cols.map(col => <td key={col.key} style={td}>{renderCell(d, col)}</td>)}
