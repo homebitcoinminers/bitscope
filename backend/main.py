@@ -1,33 +1,27 @@
 import asyncio
-import json
-import os
+import collections
 import csv
 import io
+import json
+import logging
+import os
 from version import VERSION, BUILD_DATE
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Query
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from sqlmodel import Session, select, func
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-import logging
-import collections
 
 # In-memory log ring buffer — last 500 lines shown in UI
 _log_buffer = collections.deque(maxlen=500)
 
 class BufferHandler(logging.Handler):
     def emit(self, record):
-        _log_buffer.append({
-            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%SZ"),
-            "level": record.levelname,
-            "name": record.name,
-            "msg": self.format(record),
-        })
+        try:
+            _log_buffer.append({
+                "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "level": record.levelname,
+                "name": record.name,
+                "msg": self.format(record),
+            })
+        except Exception:
+            pass  # never let logging crash the app
 
 _buf_handler = BufferHandler()
 _buf_handler.setFormatter(logging.Formatter("%(message)s"))
@@ -39,6 +33,15 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(), _buf_handler],
 )
 logger = logging.getLogger("bitscope")
+
+from typing import Optional, List
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from sqlmodel import Session, select, func
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from database import init_db, get_session, engine
 from models import (
