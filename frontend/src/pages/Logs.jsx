@@ -45,16 +45,23 @@ export default function Logs() {
     <PageWrap>
       <Topbar title="Logs">
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {levels.map(l => (
-            <button key={l} onClick={() => setFilter(l)} style={{
-              fontSize: 11, padding: '3px 8px', borderRadius: 4,
-              border: `0.5px solid ${theme.border}`,
-              background: filter === l ? (LEVEL_COLOR[l]?.bg || theme.accent) : 'transparent',
-              color: filter === l ? (l === 'ALL' ? '#fff' : LEVEL_COLOR[l]?.text) : theme.muted,
-              cursor: 'pointer',
-              backgroundColor: filter === l && l === 'ALL' ? theme.accent : undefined,
-            }}>{l}</button>
-          ))}
+          {levels.map(l => {
+            const active = filter === l
+            const lc = LEVEL_COLOR[l]
+            return (
+              <button key={l} onClick={() => setFilter(l)} style={{
+                fontSize: 11, padding: '3px 10px', borderRadius: 4,
+                border: `0.5px solid ${active ? (l === 'ALL' ? theme.accent : lc?.text || theme.accent) : theme.border}`,
+                background: active
+                  ? (l === 'ALL' ? theme.accent : lc?.bg || theme.statBg)
+                  : 'transparent',
+                color: active
+                  ? (l === 'ALL' ? '#fff' : lc?.text || theme.text)
+                  : theme.muted,
+                cursor: 'pointer', fontWeight: active ? 500 : 400,
+              }}>{l}</button>
+            )
+          })}
         </div>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search logs…"
           style={{ border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '4px 10px', fontSize: 12, background: theme.inputBg, color: theme.text, width: 200, outline: 'none' }} />

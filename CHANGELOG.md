@@ -1,5 +1,16 @@
 # BitScope Changelog
 
+## v0.4.2 — 2026-04-05
+
+### Fixed
+- **Capture from device 500** — `re` module imported inside function after it was used, causing `UnboundLocalError`. Fixed by using `import re as _re` at the top of the function
+- **Log filter buttons** — active filter button didn't visually deactivate when clicking another. Rewrote button styles to properly reflect active/inactive state with correct colours
+- **Profiles missing password fields** — password and fallback password fields were in the data but missing from the Profiles edit form and read-only view
+- **Fleet config no profile dropdown** — profile selector was only in per-device configure panel, not fleet config. Added to fleet panel with same apply-on-select behaviour
+- **Fleet config missing fallback password** — fallback password field and confirmation display added
+
+---
+
 ## v0.4.1 — 2026-04-05
 
 ### Fixed

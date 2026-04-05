@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '../api.js'
 import { useTheme, Btn, Badge } from './UI.jsx'
 
@@ -37,6 +37,29 @@ export default function FleetConfigPanel({ devices, onClose }) {
   const theme = useTheme()
   const [selected, setSelected] = useState(new Set(devices.filter(d => d.last_seen && (Date.now() - new Date(d.last_seen).getTime()) / 1000 < 180).map(d => d.mac)))
   const [saving, setSaving] = useState(false)
+  const [profiles, setProfiles] = useState([])
+
+  useEffect(() => {
+    api.profiles().then(setProfiles).catch(() => {})
+  }, [])
+
+  const applyProfile = (profileId) => {
+    const p = profiles.find(x => x._id === profileId)
+    if (!p?.pool) return
+    setPool(prev => ({
+      ...prev,
+      stratumURL: p.pool.stratumURL ?? prev.stratumURL,
+      stratumPort: String(p.pool.stratumPort ?? prev.stratumPort),
+      stratumUser: p.pool.stratumUser ?? prev.stratumUser,
+      stratumPassword: p.pool.stratumPassword ?? prev.stratumPassword,
+      stratumTLS: p.pool.stratumTLS ?? prev.stratumTLS,
+      fallbackStratumURL: p.pool.fallbackStratumURL ?? prev.fallbackStratumURL,
+      fallbackStratumPort: String(p.pool.fallbackStratumPort ?? prev.fallbackStratumPort),
+      fallbackStratumUser: p.pool.fallbackStratumUser ?? prev.fallbackStratumUser,
+      fallbackStratumPassword: p.pool.fallbackStratumPassword ?? prev.fallbackStratumPassword,
+      fallbackStratumTLS: p.pool.fallbackStratumTLS ?? prev.fallbackStratumTLS,
+    }))
+  }
   const [result, setResult] = useState(null)
   const [step, setStep] = useState('config') // 'config' | 'confirm'
 
@@ -94,6 +117,7 @@ export default function FleetConfigPanel({ devices, onClose }) {
     if (pool.fallbackStratumURL)  changes.push(`Fallback URL: ${pool.fallbackStratumURL}`)
     if (pool.fallbackStratumPort) changes.push(`Fallback port: ${pool.fallbackStratumPort}`)
     if (pool.fallbackStratumUser) changes.push(`Fallback worker: ${pool.fallbackStratumUser}`)
+    if (pool.fallbackStratumPassword) changes.push(`Fallback password: (set)`)
     return changes
   }
 
@@ -123,6 +147,17 @@ export default function FleetConfigPanel({ devices, onClose }) {
 
           {step === 'config' ? (
             <div>
+              {profiles.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+                  <span style={{ fontSize: 11, color: theme.muted, flexShrink: 0 }}>Apply profile:</span>
+                  <select defaultValue="" onChange={e => e.target.value && applyProfile(e.target.value)}
+                    style={{ flex: 1, border: `0.5px solid ${theme.border}`, borderRadius: 5, padding: '5px 8px', fontSize: 12, background: theme.inputBg, color: theme.text }}>
+                    <option value="">Select a profile…</option>
+                    {profiles.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                  </select>
+                </div>
+              )}
+
               <div style={{ fontSize: 12, color: theme.muted, marginBottom: 14, padding: '8px 12px', background: theme.statBg, borderRadius: 6 }}>
                 Only fill in the fields you want to change. Blank fields keep each device's current value.
               </div>

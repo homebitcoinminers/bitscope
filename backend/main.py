@@ -949,9 +949,8 @@ def get_profile(profile_id: str):
 
 @app.post("/api/profiles/{profile_id}")
 def save_profile(profile_id: str, body: dict):
-    # Sanitise id — alphanumeric + underscores/hyphens only
-    import re
-    clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', profile_id)
+    import re as _re
+    clean_id = _re.sub(r'[^a-zA-Z0-9_-]', '_', profile_id)
     return profile_store.save_profile(clean_id, body)
 
 
@@ -968,6 +967,7 @@ def delete_profile(profile_id: str):
 @app.post("/api/devices/{mac}/profiles/capture")
 async def capture_profile_from_device(mac: str, body: dict, db: Session = Depends(get_session)):
     """Capture current device settings as a new profile."""
+    import re as _re
     mac = mac.upper()
     device = db.get(Device, mac)
     if not device or not device.last_ip:
@@ -986,8 +986,7 @@ async def capture_profile_from_device(mac: str, body: dict, db: Session = Depend
             raise HTTPException(502, str(e))
 
     name = body.get("name") or f"{device.label or device.hostname or mac} settings"
-    profile_id = re.sub(r'[^a-zA-Z0-9_-]', '_', name.lower().replace(' ', '_'))
-    import re
+    profile_id = _re.sub(r'[^a-zA-Z0-9_-]', '_', name.lower().replace(' ', '_'))
     p = profile_store.profile_from_device_snapshot(raw, name)
     return profile_store.save_profile(profile_id, p)
 

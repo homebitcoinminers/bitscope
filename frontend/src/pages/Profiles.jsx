@@ -132,12 +132,14 @@ export default function Profiles() {
                     <F label="Pool URL"><input value={form.pool?.stratumURL || ''} onChange={e => sp('pool','stratumURL')(e.target.value)} style={inp} /></F>
                     <F label="Port"><input type="number" value={form.pool?.stratumPort || ''} onChange={e => sp('pool','stratumPort')(Number(e.target.value))} style={inp} /></F>
                     <F label="Worker"><input value={form.pool?.stratumUser || ''} onChange={e => sp('pool','stratumUser')(e.target.value)} style={{ ...inp, fontFamily: 'monospace' }} /></F>
+                    <F label="Password"><input value={form.pool?.stratumPassword || ''} onChange={e => sp('pool','stratumPassword')(e.target.value)} style={inp} placeholder="x" /></F>
                     <F label="TLS">
                       <Tog value={form.pool?.stratumTLS} onChange={sp('pool','stratumTLS')} />
                     </F>
                     <F label="Fallback URL"><input value={form.pool?.fallbackStratumURL || ''} onChange={e => sp('pool','fallbackStratumURL')(e.target.value)} style={inp} /></F>
                     <F label="Fallback port"><input type="number" value={form.pool?.fallbackStratumPort || ''} onChange={e => sp('pool','fallbackStratumPort')(Number(e.target.value))} style={inp} /></F>
                     <F label="Fallback worker"><input value={form.pool?.fallbackStratumUser || ''} onChange={e => sp('pool','fallbackStratumUser')(e.target.value)} style={{ ...inp, fontFamily: 'monospace' }} /></F>
+                    <F label="Fallback password"><input value={form.pool?.fallbackStratumPassword || ''} onChange={e => sp('pool','fallbackStratumPassword')(e.target.value)} style={inp} placeholder="x" /></F>
                     <F label="Fallback TLS">
                       <Tog value={form.pool?.fallbackStratumTLS} onChange={sp('pool','fallbackStratumTLS')} />
                     </F>
