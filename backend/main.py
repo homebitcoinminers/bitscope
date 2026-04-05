@@ -334,7 +334,8 @@ def upsert_threshold(scope: str, body: dict, db: Session = Depends(get_session))
         db.add(t)
     for field in ["temp_max", "vr_temp_max", "power_over_spec_pct", "error_pct_max",
                   "duplicate_hw_nonces_max", "ping_loss_max", "fan_rpm_min",
-                  "hashrate_below_expected_pct", "wifi_rssi_min", "offline_after_polls"]:
+                  "hashrate_below_expected_pct", "wifi_rssi_min", "offline_after_polls",
+                  "power_max_w"]:
         if field in body:
             setattr(t, field, body[field])
     db.commit()

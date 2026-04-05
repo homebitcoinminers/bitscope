@@ -436,6 +436,8 @@ export default function DeviceDetail() {
                     thresholds.find(t => t.scope === `type:${device.model}`) ? 'type' : 'global'} />
                 <ThreshRow label="VR temp max" threshold={myThresh.vr_temp_max} value={latest?.vr_temp} unit="°C" scope="global" />
                 <ThreshRow label="Error rate" threshold={myThresh.error_pct_max} value={latest?.error_percentage} unit="%" scope="global" />
+                <ThreshRow label="Power max" threshold={myThresh.power_max_w} value={latest?.power} unit="W"
+                  scope="type" />
                 <ThreshRow label="Fan RPM min" threshold={myThresh.fan_rpm_min} value={latest?.fan_rpm} unit="" lowerIsBad scope="global" />
                 <ThreshRow label="HW nonces" threshold={myThresh.duplicate_hw_nonces_max} value={latest?.duplicate_hw_nonces} unit="" scope="global" />
                 <ThreshRow label="WiFi RSSI" threshold={myThresh.wifi_rssi_min} value={latest?.wifi_rssi} unit=" dBm" lowerIsBad scope="global" />

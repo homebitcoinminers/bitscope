@@ -136,27 +136,44 @@ def check_thresholds(snapshot: MetricSnapshot, device: Device, db: Session) -> l
     thresh = get_thresholds(device.mac, device.model, db)
     to_fire = []
 
-    def check(alert_type, breaching, message, resolved_msg, value=None, threshold=None):
+    def check(alert_type, breaching, msg_fn, resolved_fn, value=None, threshold=None):
+        """msg_fn and resolved_fn are callables to avoid eager f-string evaluation on None values."""
         fire, resolved = _should_fire(device.mac, alert_type, bool(breaching))
         if fire:
+            try:
+                message = msg_fn()
+            except Exception:
+                message = f"Alert: {alert_type}"
             to_fire.append({"type": alert_type, "message": message,
                 "value": str(value) if value is not None else None,
                 "threshold": str(threshold) if threshold is not None else None, "resolved": False})
         elif resolved:
+            try:
+                resolved_msg = resolved_fn()
+            except Exception:
+                resolved_msg = f"Resolved: {alert_type}"
             to_fire.append({"type": alert_type, "message": resolved_msg,
                 "value": None, "threshold": None, "resolved": True})
 
+    temp = snapshot.temp
+    vr = snapshot.vr_temp
+    err = snapshot.error_percentage
+    fan = snapshot.fan_rpm
+    rssi = snapshot.wifi_rssi
+    pwr = snapshot.power
+    nonces = snapshot.duplicate_hw_nonces
+
     check("overheat",
-        snapshot.temp is not None and thresh.temp_max and snapshot.temp > thresh.temp_max,
-        f"Temperature {snapshot.temp:.1f}°C exceeds {thresh.temp_max}°C",
-        f"Temperature back to normal ({snapshot.temp:.1f}°C)",
-        snapshot.temp, thresh.temp_max)
+        temp is not None and thresh.temp_max and temp > thresh.temp_max,
+        lambda: f"Temperature {temp:.1f}°C exceeds {thresh.temp_max}°C",
+        lambda: f"Temperature back to normal ({temp:.1f}°C)",
+        temp, thresh.temp_max)
 
     check("vr_overheat",
-        snapshot.vr_temp is not None and thresh.vr_temp_max and snapshot.vr_temp > thresh.vr_temp_max,
-        f"VR temperature {snapshot.vr_temp:.1f}°C exceeds {thresh.vr_temp_max}°C",
-        f"VR temperature back to normal ({snapshot.vr_temp:.1f}°C)",
-        snapshot.vr_temp, thresh.vr_temp_max)
+        vr is not None and thresh.vr_temp_max and vr > thresh.vr_temp_max,
+        lambda: f"VR temperature {vr:.1f}°C exceeds {thresh.vr_temp_max}°C",
+        lambda: f"VR temperature back to normal ({vr:.1f}°C)",
+        vr, thresh.vr_temp_max)
 
     asic_over = []
     if snapshot.asic_temps:
@@ -166,43 +183,44 @@ def check_thresholds(snapshot: MetricSnapshot, device: Device, db: Session) -> l
         except Exception:
             pass
     check("asic_overheat", len(asic_over) > 0,
-        f"ASIC chip(s) overtemp: {', '.join(f'ASIC{i+1}={t:.0f}C' for i,t in asic_over)}",
-        "ASIC chip temperatures back to normal")
+        lambda: f"ASIC chip(s) overtemp: {', '.join(f'ASIC{i+1}={t:.0f}C' for i,t in asic_over)}",
+        lambda: "ASIC chip temperatures back to normal")
 
     check("error_rate",
-        snapshot.error_percentage is not None and thresh.error_pct_max is not None
-            and snapshot.error_percentage > thresh.error_pct_max,
-        f"Error rate {snapshot.error_percentage:.2f}% exceeds {thresh.error_pct_max}%",
-        f"Error rate back to normal ({snapshot.error_percentage:.2f}%)",
-        snapshot.error_percentage, thresh.error_pct_max)
+        err is not None and thresh.error_pct_max is not None and err > thresh.error_pct_max,
+        lambda: f"Error rate {err:.2f}% exceeds {thresh.error_pct_max}%",
+        lambda: f"Error rate back to normal ({err:.2f}%)",
+        err, thresh.error_pct_max)
 
     check("hw_nonce",
-        snapshot.duplicate_hw_nonces is not None and thresh.duplicate_hw_nonces_max is not None
-            and snapshot.duplicate_hw_nonces > thresh.duplicate_hw_nonces_max,
-        f"Duplicate HW nonces: {snapshot.duplicate_hw_nonces} — possible hardware fault",
-        "Duplicate HW nonces cleared", snapshot.duplicate_hw_nonces, 0)
+        nonces is not None and thresh.duplicate_hw_nonces_max is not None
+            and nonces > thresh.duplicate_hw_nonces_max,
+        lambda: f"Duplicate HW nonces: {nonces} — possible hardware fault",
+        lambda: "Duplicate HW nonces cleared",
+        nonces, 0)
 
-    power_over = (snapshot.power is not None and snapshot.max_power is not None
-        and thresh.power_over_spec_pct is not None
-        and snapshot.power > snapshot.max_power * (thresh.power_over_spec_pct / 100))
+    # Power alert uses configured threshold only — ignores device maxPower field
+    # because factory-overclocked units legitimately exceed the API's maxPower value
+    power_thresh = thresh.power_over_spec_pct  # treat as absolute watts if > 200, else ignore
+    # Use a separate configured absolute watt limit instead
+    power_max_w = getattr(thresh, 'power_max_w', None)
+    power_over = (pwr is not None and power_max_w is not None and pwr > power_max_w)
     check("power_over_spec", power_over,
-        f"Power {snapshot.power:.0f}W exceeds device max {snapshot.max_power:.0f}W",
-        f"Power back within spec ({snapshot.power:.0f}W)",
-        snapshot.power, snapshot.max_power)
+        lambda: f"Power {pwr:.0f}W exceeds configured max {power_max_w:.0f}W",
+        lambda: f"Power back within limit ({pwr:.0f}W)",
+        pwr, power_max_w)
 
     check("fan_failure",
-        snapshot.fan_rpm is not None and thresh.fan_rpm_min
-            and snapshot.fan_rpm > 0 and snapshot.fan_rpm < thresh.fan_rpm_min,
-        f"Fan RPM {snapshot.fan_rpm} below minimum {thresh.fan_rpm_min}",
-        f"Fan RPM back to normal ({snapshot.fan_rpm})",
-        snapshot.fan_rpm, thresh.fan_rpm_min)
+        fan is not None and thresh.fan_rpm_min and fan > 0 and fan < thresh.fan_rpm_min,
+        lambda: f"Fan RPM {fan} below minimum {thresh.fan_rpm_min}",
+        lambda: f"Fan RPM back to normal ({fan})",
+        fan, thresh.fan_rpm_min)
 
     check("weak_wifi",
-        snapshot.wifi_rssi is not None and thresh.wifi_rssi_min
-            and snapshot.wifi_rssi < thresh.wifi_rssi_min,
-        f"WiFi RSSI {snapshot.wifi_rssi} dBm below {thresh.wifi_rssi_min} dBm",
-        f"WiFi signal recovered ({snapshot.wifi_rssi} dBm)",
-        snapshot.wifi_rssi, thresh.wifi_rssi_min)
+        rssi is not None and thresh.wifi_rssi_min and rssi < thresh.wifi_rssi_min,
+        lambda: f"WiFi RSSI {rssi} dBm below {thresh.wifi_rssi_min} dBm",
+        lambda: f"WiFi signal recovered ({rssi} dBm)",
+        rssi, thresh.wifi_rssi_min)
 
     return to_fire
 

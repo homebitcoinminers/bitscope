@@ -6,7 +6,7 @@ const FIELDS = [
   { key: 'temp_max', label: 'Max temperature', unit: '°C', desc: 'Alert when ASIC temp exceeds this' },
   { key: 'vr_temp_max', label: 'Max VR temperature', unit: '°C', desc: 'Alert when VRM temp exceeds this' },
   { key: 'error_pct_max', label: 'Max error rate', unit: '%', desc: 'Alert when hashrate error % exceeds this' },
-  { key: 'power_over_spec_pct', label: 'Power over-spec %', unit: '%', desc: 'Alert when power exceeds device maxPower × this %' },
+  { key: 'power_max_w', label: 'Max power (W)', unit: 'W', desc: 'Absolute watt limit — set per device type for overclocked units. Blank = disabled. Replaces the unreliable API maxPower field.' },
   { key: 'duplicate_hw_nonces_max', label: 'HW nonce duplicates', unit: '', desc: 'Alert when non-zero (hardware fault indicator)' },
   { key: 'fan_rpm_min', label: 'Min fan RPM', unit: 'rpm', desc: 'Alert when fan spins below this (0 = ignore)' },
   { key: 'wifi_rssi_min', label: 'Min WiFi RSSI', unit: 'dBm', desc: 'Alert when signal drops below this' },

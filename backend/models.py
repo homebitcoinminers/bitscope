@@ -95,6 +95,7 @@ class ThresholdConfig(SQLModel, table=True):
     hashrate_below_expected_pct: Optional[float] = 15.0
     wifi_rssi_min: Optional[int] = -80
     offline_after_polls: Optional[int] = 3
+    power_max_w: Optional[float] = None  # Absolute watt limit — None = disabled. Use this instead of device maxPower for overclocked units.
 
 
 class AlertLog(SQLModel, table=True):
