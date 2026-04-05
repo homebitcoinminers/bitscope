@@ -1,7 +1,9 @@
+import asyncio
 import json
 import os
 import csv
 import io
+from version import VERSION, BUILD_DATE
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from contextlib import asynccontextmanager
@@ -11,6 +13,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select, func
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+import logging
+import collections
+
+# In-memory log ring buffer — last 500 lines shown in UI
+_log_buffer = collections.deque(maxlen=500)
+
+class BufferHandler(logging.Handler):
+    def emit(self, record):
+        _log_buffer.append({
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%SZ"),
+            "level": record.levelname,
+            "name": record.name,
+            "msg": self.format(record),
+        })
+
+_buf_handler = BufferHandler()
+_buf_handler.setFormatter(logging.Formatter("%(message)s"))
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%SZ",
+    handlers=[logging.StreamHandler(), _buf_handler],
+)
+logger = logging.getLogger("bitscope")
 
 from database import init_db, get_session, engine
 from models import (
@@ -45,7 +73,6 @@ async def lifespan(app: FastAPI):
     scheduler.start()
 
     # Initial scan on startup
-    import asyncio
     asyncio.create_task(scan_and_discover())
 
     yield
@@ -457,7 +484,6 @@ def delete_subnet(subnet_id: int, db: Session = Depends(get_session)):
 
 @app.post("/api/scanner/scan")
 async def trigger_scan():
-    import asyncio
     asyncio.create_task(scan_and_discover())
     return {"ok": True, "message": "Scan started"}
 
@@ -674,7 +700,6 @@ def update_digest_config(body: dict, db: Session = Depends(get_session)):
 @app.post("/api/settings/digest/send-now")
 async def send_digest_now():
     """Trigger an immediate digest send."""
-    import asyncio
     asyncio.create_task(send_daily_digest())
     return {"ok": True}
 
@@ -701,13 +726,12 @@ async def _check_daily_digest():
 
 async def _patch_device(ip: str, payload: dict) -> dict:
     """Send a PATCH request to a device's AxeOS API."""
-    import aiohttp as _aio
     try:
-        async with _aio.ClientSession() as http:
+        async with aiohttp.ClientSession() as http:
             async with http.patch(
                 f"http://{ip}/api/system",
                 json=payload,
-                timeout=_aio.ClientTimeout(total=10),
+                timeout=aiohttp.ClientTimeout(total=10),
                 headers={"Host": ip, "Content-Type": "application/json"},
             ) as resp:
                 status = resp.status
@@ -722,12 +746,11 @@ async def _patch_device(ip: str, payload: dict) -> dict:
 
 async def _restart_device(ip: str) -> dict:
     """POST restart to a device."""
-    import aiohttp as _aio
     try:
-        async with _aio.ClientSession() as http:
+        async with aiohttp.ClientSession() as http:
             async with http.post(
                 f"http://{ip}/api/system/restart",
-                timeout=_aio.ClientTimeout(total=8),
+                timeout=aiohttp.ClientTimeout(total=8),
                 headers={"Host": ip},
             ) as resp:
                 return {"ok": resp.status in (200, 204)}
@@ -896,6 +919,15 @@ async def fleet_configure_pool(body: dict, db: Session = Depends(get_session)):
     }
 
 
+@app.get("/api/logs")
+def get_logs(limit: int = 200, level: str = "ALL"):
+    """Return recent in-memory log lines."""
+    logs = list(_log_buffer)
+    if level != "ALL":
+        logs = [l for l in logs if l["level"] == level]
+    return list(reversed(logs[-limit:]))
+
+
 # ── Settings ──────────────────────────────────────────────────────────────────
 
 @app.get("/api/settings")
@@ -905,6 +937,8 @@ def get_settings():
         "poll_interval": int(os.getenv("POLL_INTERVAL", "30")),
         "scan_interval": int(os.getenv("SCAN_INTERVAL", "300")),
         "alert_types": _alert_types_enabled,
+        "version": VERSION,
+        "build_date": BUILD_DATE,
     }
 
 @app.post("/api/settings/discord/toggle")

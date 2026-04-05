@@ -6,6 +6,7 @@ import Sessions from './pages/Sessions.jsx'
 import Alerts from './pages/Alerts.jsx'
 import Scanner from './pages/Scanner.jsx'
 import Thresholds from './pages/Thresholds.jsx'
+import Logs from './pages/Logs.jsx'
 import { api } from './api.js'
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -45,6 +46,7 @@ const NAV = [
   { to: '/alerts', label: 'Alerts', icon: BellIcon },
   { to: '/scanner', label: 'Scanner', icon: RadarIcon },
   { to: '/thresholds', label: 'Thresholds', icon: SliderIcon },
+  { to: '/logs', label: 'Logs', icon: TerminalIcon },
 ]
 
 export default function App() {
@@ -76,6 +78,7 @@ export default function App() {
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/scanner" element={<Scanner />} />
               <Route path="/thresholds" element={<Thresholds />} />
+              <Route path="/logs" element={<Logs />} />
             </Routes>
           </main>
         </div>
@@ -89,9 +92,13 @@ function Sidebar() {
   const [discordEnabled, setDiscordEnabled] = useState(true)
   const [loadingDiscord, setLoadingDiscord] = useState(false)
   const [tz, setTz] = useState(() => localStorage.getItem('bs-tz') || 'local')
+  const [version, setVersion] = useState(null)
 
   useEffect(() => {
-    api.settings().then(s => setDiscordEnabled(s.discord_enabled)).catch(() => {})
+    api.settings().then(s => {
+      setDiscordEnabled(s.discord_enabled)
+      if (s.version) setVersion(s.version)
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -161,6 +168,14 @@ function Sidebar() {
 
       {/* Footer controls */}
       <div style={{ padding: '12px 14px', borderTop: `0.5px solid ${theme.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+        {/* Version */}
+        <a href="https://github.com/homebitcoinminers/bitscope/blob/main/CHANGELOG.md" target="_blank" rel="noreferrer"
+          style={{ fontSize: 11, color: theme.faint, textDecoration: 'none' }}
+          onMouseEnter={e => e.target.style.color = theme.accent}
+          onMouseLeave={e => e.target.style.color = theme.faint}>
+          BitScope {version || 'v0.4.0'} · changelog →
+        </a>
         {/* Discord toggle */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 11, color: theme.muted, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -269,4 +284,7 @@ function SliderIcon({ size = 14 }) {
 }
 function ShieldIcon({ size = 16, color = 'currentColor' }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill={color}><path d="M8 1L2 4v4c0 3.5 2.5 6.5 6 7.5 3.5-1 6-4 6-7.5V4L8 1z"/></svg>
+}
+function TerminalIcon({ size = 14 }) {
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path d="M1 2h14a1 1 0 011 1v10a1 1 0 01-1 1H1a1 1 0 01-1-1V3a1 1 0 011-1zm2 8l3-3-3-3m4 6h4"/><path d="M3 7l2.5 2.5L3 12M8 12h5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
 }

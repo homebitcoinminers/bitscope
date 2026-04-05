@@ -1,10 +1,25 @@
 # BitScope
 
-Pre-sale QA monitoring for Bitaxe, NerdQAxe++, and NerdOCTAxe miners.
+Pre-sale QA monitoring and fleet management for Bitaxe, NerdQAxe++, and NerdOCTAxe miners.
 
-Auto-discovers miners on your LAN, logs all metrics against MAC address, lets you run test sessions before sale, and compare a returned device's historical performance against how it ran when you sold it.
+**Current version: v0.4.0** — see [CHANGELOG.md](CHANGELOG.md) for full history.
 
-**Built by [homebitcoinminers](https://github.com/homebitcoinminers)**
+---
+
+## ⚠️ Disclaimer
+
+BitScope is provided as-is for informational and management purposes only.
+
+**By using BitScope, you acknowledge and agree:**
+
+- You are solely responsible for any changes made to your mining devices through this tool, including pool configuration, frequency, and voltage adjustments
+- Changing frequency or core voltage above factory defaults may void device warranties, cause hardware damage, reduce component lifespan, or cause unexpected behaviour
+- Always verify settings directly on the device after applying changes — BitScope proxies the AxeOS API but cannot guarantee the device accepted all settings
+- The authors of BitScope accept no liability for hardware damage, financial loss, lost hashrate, or any other consequence arising from use of this software
+- This software has not been audited for security. Do not expose it to the public internet. Run it on a trusted local network only
+- All device data is stored locally in a SQLite database. You are responsible for backups
+
+**This is open source software. Review the code before running it on your infrastructure.**
 
 ---
 

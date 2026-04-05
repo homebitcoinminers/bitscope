@@ -63,6 +63,9 @@ export const api = {
   deleteSubnet: (id) => req('DELETE', `/scanner/subnets/${id}`),
   triggerScan: () => req('POST', '/scanner/scan'),
 
+  // Logs
+  logs: (limit = 200, level = 'ALL') => req('GET', `/logs?limit=${limit}&level=${level}`),
+
   // HW Nonce tracking
   deviceNonces: (mac) => req('GET', `/devices/${mac}/nonces`),
   deviceNonceHistory: (mac, hours = 24) => req('GET', `/devices/${mac}/nonces/history?hours=${hours}`),
