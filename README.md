@@ -32,19 +32,27 @@ docker compose up -d
 
 Open **http://your-server-ip:8080**
 
+## Unraid setup
+
+1. Install the **Compose Manager** plugin from the Unraid Community Apps store
+2. Add a new stack, point it at this repo or paste the `docker-compose.yml`
+3. Set the volume path to `/mnt/user/appdata/bitscope`
+4. Set your `.env` variables in the Compose Manager UI
+5. Start the stack
+
 Data persists in a Docker volume (`bitscope_data`) mapped to `/data` inside the container.
 
 ## Configuration
 
 All config via `.env`:
 
-| Variable              | Default           | Description                     |
-| --------------------- | ----------------- | ------------------------------- |
-| `DISCORD_WEBHOOK_URL` | —                 | Discord webhook for alerts      |
-| `SCAN_SUBNETS`        | `192.168.60.0/24` | Comma-separated subnets to scan |
-| `POLL_INTERVAL`       | `30`              | Seconds between device polls    |
-| `SCAN_INTERVAL`       | `300`             | Seconds between subnet scans    |
-| `DATA_RETENTION_DAYS` | `365`             | Days of metrics to keep         |
+| Variable | Default | Description |
+|---|---|---|
+| `DISCORD_WEBHOOK_URL` | — | Discord webhook for alerts |
+| `SCAN_SUBNETS` | `192.168.60.0/24` | Comma-separated subnets to scan |
+| `POLL_INTERVAL` | `30` | Seconds between device polls |
+| `SCAN_INTERVAL` | `300` | Seconds between subnet scans |
+| `DATA_RETENTION_DAYS` | `365` | Days of metrics to keep |
 
 Additional subnets can also be added from the Scanner page in the UI without restarting.
 

@@ -17,7 +17,7 @@ services:
       - bitscope
 
   frontend:
-    build: ./frontend
+    image: ghcr.io/homebitcoinminers/bitscope-frontend:latest
     container_name: bitscope-frontend
     restart: unless-stopped
     ports:

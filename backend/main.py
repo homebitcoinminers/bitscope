@@ -17,7 +17,7 @@ from models import (
     Device, MetricSnapshot, Session as DBSession,
     ThresholdConfig, AlertLog, ScanConfig
 )
-from scanner import scan_and_discover, poll_all_devices, upsert_device, fetch_device_info
+from scanner import scan_and_discover, poll_all_devices, upsert_device, fetch_device_info, get_discord_enabled, set_discord_enabled
 import aiohttp
 
 scheduler = AsyncIOScheduler()
@@ -409,6 +409,23 @@ def fleet_stats(db: Session = Depends(get_session)):
         "efficiency_w_per_th": round(efficiency, 2),
         "active_sessions": active_sessions,
     }
+
+
+# ── Settings ──────────────────────────────────────────────────────────────────
+
+@app.get("/api/settings")
+def get_settings():
+    return {
+        "discord_enabled": get_discord_enabled(),
+        "poll_interval": int(os.getenv("POLL_INTERVAL", "30")),
+        "scan_interval": int(os.getenv("SCAN_INTERVAL", "300")),
+    }
+
+@app.post("/api/settings/discord/toggle")
+def toggle_discord():
+    new_state = not get_discord_enabled()
+    set_discord_enabled(new_state)
+    return {"discord_enabled": new_state}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

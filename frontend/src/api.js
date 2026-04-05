@@ -58,4 +58,8 @@ export const api = {
   addSubnet: (subnet, label) => req('POST', '/scanner/subnets', { subnet, label }),
   deleteSubnet: (id) => req('DELETE', `/scanner/subnets/${id}`),
   triggerScan: () => req('POST', '/scanner/scan'),
+
+  // Settings
+  settings: () => req('GET', '/settings'),
+  toggleDiscord: () => req('POST', '/settings/discord/toggle'),
 }
