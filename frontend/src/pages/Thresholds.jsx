@@ -3,15 +3,18 @@ import { api } from '../api.js'
 import { PageWrap, Topbar, Card, Badge, Btn, SectionTitle } from '../components/UI.jsx'
 
 const FIELDS = [
-  { key: 'temp_max', label: 'Max temperature', unit: '°C', desc: 'Alert when ASIC temp exceeds this' },
-  { key: 'vr_temp_max', label: 'Max VR temperature', unit: '°C', desc: 'Alert when VRM temp exceeds this' },
-  { key: 'error_pct_max', label: 'Max error rate', unit: '%', desc: 'Alert when hashrate error % exceeds this' },
-  { key: 'power_max_w', label: 'Max power (W)', unit: 'W', desc: 'Absolute watt limit — set per device type for overclocked units. Blank = disabled. Replaces the unreliable API maxPower field.' },
-  { key: 'duplicate_hw_nonces_max', label: 'HW nonce duplicates', unit: '', desc: 'Alert when non-zero (hardware fault indicator)' },
-  { key: 'fan_rpm_min', label: 'Min fan RPM', unit: 'rpm', desc: 'Alert when fan spins below this (0 = ignore)' },
-  { key: 'wifi_rssi_min', label: 'Min WiFi RSSI', unit: 'dBm', desc: 'Alert when signal drops below this' },
-  { key: 'offline_after_polls', label: 'Offline after N missed polls', unit: '', desc: 'Mark offline after this many failed polls (~30s each)' },
-  { key: 'hashrate_below_expected_pct', label: 'Hashrate below expected %', unit: '%', desc: 'Alert when hashrate is this % below expectedHashrate' },
+  { key: 'temp_max',                   label: 'Max temperature',          unit: '°C',  desc: 'Alert when ASIC temp exceeds this' },
+  { key: 'vr_temp_max',                label: 'Max VR temperature',       unit: '°C',  desc: 'Alert when VRM temp exceeds this' },
+  { key: 'error_pct_max',              label: 'Max error rate',           unit: '%',   desc: 'Alert when hashrate error % exceeds this' },
+  { key: 'power_max_w',                label: 'Max power (W)',            unit: 'W',   desc: 'Absolute watt limit — blank = disabled. Set per device type for overclocked units.' },
+  { key: 'hw_nonce_rate_warn',         label: 'Nonce/hr — warn',         unit: '/hr', desc: 'Discord warning when nonce rate exceeds this (default 1/hr)' },
+  { key: 'hw_nonce_rate_alert',        label: 'Nonce/hr — alert',        unit: '/hr', desc: 'Discord alert at this rate — ASIC core degrading (default 5/hr)' },
+  { key: 'hw_nonce_rate_critical',     label: 'Nonce/hr — critical',     unit: '/hr', desc: 'Discord critical — dead core, pull from stock (default 20/hr)' },
+  { key: 'hw_nonce_consecutive_polls', label: 'Nonce alert delay (polls)',unit: '',    desc: 'Only alert after rate stays above threshold for N consecutive polls' },
+  { key: 'fan_rpm_min',                label: 'Min fan RPM',             unit: 'rpm', desc: 'Alert when fan spins below this (0 = ignore)' },
+  { key: 'wifi_rssi_min',              label: 'Min WiFi RSSI',           unit: 'dBm', desc: 'Alert when signal drops below this' },
+  { key: 'offline_after_polls',        label: 'Offline after N polls',   unit: '',    desc: 'Mark offline after this many failed polls (~30s each)' },
+  { key: 'hashrate_below_expected_pct',label: 'Hashrate below expected', unit: '%',   desc: 'Alert when hashrate is this % below expectedHashrate' },
 ]
 
 const SCOPE_INFO = {

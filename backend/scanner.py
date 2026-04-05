@@ -10,7 +10,8 @@ import aiohttp
 from sqlmodel import Session, select
 
 from database import engine, get_thresholds
-from models import Device, MetricSnapshot, AlertLog, ScanConfig, Session as DBSession
+from models import Device, MetricSnapshot, AlertLog, ScanConfig, Session as DBSession, HWNonceEvent
+import nonce_tracker
 
 logger = logging.getLogger("bitscope.scanner")
 
@@ -323,6 +324,9 @@ async def scan_and_discover():
 
 # Track best diff per device for new record alerts
 _best_diff_records: dict[str, float] = {}
+
+# Track previous nonce counter per device (for delta calculation)
+_prev_nonce_counter: dict[str, int] = {}
 
 
 async def send_discord_alert(alert: AlertLog, device: Device, resolved: bool = False):

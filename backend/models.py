@@ -21,6 +21,8 @@ class Device(SQLModel, table=True):
     is_manual: bool = False              # true = manually added
     archived: bool = False               # manually archived by user
     pinned_fields: Optional[str] = None  # JSON array of extra field names to show
+    hw_nonce_total: int = 0            # cumulative all-time nonce count (survives reboots)
+    hw_nonce_rate_1h: Optional[float] = None  # rolling 1h rate (nonces/hour), updated each poll
 
 
 class MetricSnapshot(SQLModel, table=True):
@@ -58,7 +60,8 @@ class MetricSnapshot(SQLModel, table=True):
 
     # NerdQAxe+ specific
     asic_temps: Optional[str] = None     # JSON array
-    duplicate_hw_nonces: Optional[int] = None
+    duplicate_hw_nonces: Optional[int] = None   # raw counter from device (resets on reboot)
+    hw_nonce_delta: Optional[int] = None         # nonces that occurred THIS poll window
     last_ping_rtt: Optional[float] = None
     recent_ping_loss: Optional[float] = None
     pool_difficulty: Optional[int] = None
@@ -96,7 +99,11 @@ class ThresholdConfig(SQLModel, table=True):
     hashrate_below_expected_pct: Optional[float] = 15.0
     wifi_rssi_min: Optional[int] = -80
     offline_after_polls: Optional[int] = 3
-    power_max_w: Optional[float] = None  # Absolute watt limit — None = disabled. Use this instead of device maxPower for overclocked units.
+    power_max_w: Optional[float] = None  # Absolute watt limit — None = disabled.
+    hw_nonce_rate_warn: Optional[float] = 1.0    # nonces/hour — warn threshold
+    hw_nonce_rate_alert: Optional[float] = 5.0   # nonces/hour — alert threshold
+    hw_nonce_rate_critical: Optional[float] = 20.0  # nonces/hour — critical threshold
+    hw_nonce_consecutive_polls: Optional[int] = 3   # must breach for N polls before alerting
 
 
 class AlertLog(SQLModel, table=True):
@@ -117,3 +124,28 @@ class ScanConfig(SQLModel, table=True):
     subnet: str
     enabled: bool = True
     label: Optional[str] = None
+
+
+class HWNonceEvent(SQLModel, table=True):
+    """Individual nonce fault event derived from poll delta — persists across reboots."""
+    __tablename__ = "hw_nonce_events"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    mac: str = Field(index=True)
+    ts: datetime = Field(default_factory=datetime.utcnow, index=True)
+    delta: int                          # nonces that occurred in this poll window
+    raw_counter: int                    # device counter value at time of detection
+    uptime_seconds: Optional[int] = None
+    temp: Optional[float] = None
+    frequency: Optional[int] = None
+    core_voltage: Optional[int] = None
+    session_id: Optional[int] = None
+
+
+class DigestConfig(SQLModel, table=True):
+    """Daily digest configuration."""
+    __tablename__ = "digest_config"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    enabled: bool = True
+    hour_utc: int = 22                  # 22:00 UTC = 8am AEST
+    minute_utc: int = 0
+    last_sent: Optional[datetime] = None

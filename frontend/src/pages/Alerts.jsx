@@ -23,6 +23,8 @@ const ALERT_LABELS = {
   weak_wifi:       { label: 'Weak WiFi', desc: 'RSSI below minimum threshold' },
   new_device:      { label: 'New device found', desc: 'Scanner discovers a new miner' },
   new_best_diff:   { label: 'New best difficulty', desc: 'Device sets a new all-time best diff' },
+  hw_nonce_rate:   { label: 'HW nonce rate alert', desc: 'Nonce/hr exceeds warn/alert/critical threshold' },
+  hw_nonce_digest: { label: 'Daily nonce digest', desc: 'Morning summary of nonce activity across all devices' },
 }
 
 export default function Alerts() {
@@ -32,12 +34,13 @@ export default function Alerts() {
   const [filter, setFilter]           = useState('all')
   const [showSettings, setShowSettings] = useState(false)
   const [saving, setSaving]           = useState(false)
+  const [digestCfg, setDigestCfg]     = useState(null)
   const navigate = useNavigate()
   const theme = useTheme()
 
   useEffect(() => {
-    Promise.all([api.alerts(200), api.getAlertSettings()]).then(([a, s]) => {
-      setAlerts(a); setAlertSettings(s); setLoading(false)
+    Promise.all([api.alerts(200), api.getAlertSettings(), api.digestConfig()]).then(([a, s, d]) => {
+      setAlerts(a); setAlertSettings(s); setDigestCfg(d); setLoading(false)
     })
     const t = setInterval(() => api.alerts(200).then(setAlerts), 30000)
     return () => clearInterval(t)
@@ -102,7 +105,49 @@ export default function Alerts() {
           </Card>
         )}
 
-        {/* Alert log */}
+        {/* Daily digest config */}
+        {showSettings && digestCfg && (
+          <Card>
+            <SectionTitle>Daily HW nonce digest</SectionTitle>
+            <div style={{ fontSize: 12, color: theme.muted, marginBottom: 12 }}>
+              A daily Discord summary of HW nonce activity across all devices — even if no threshold was breached.
+              Good for keeping an eye on units accumulating nonces slowly.
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: theme.text, cursor: 'pointer' }}>
+                <input type="checkbox" checked={digestCfg.enabled}
+                  onChange={async e => {
+                    const next = { ...digestCfg, enabled: e.target.checked }
+                    setDigestCfg(next)
+                    await api.updateDigestConfig({ enabled: e.target.checked })
+                  }} style={{ cursor: 'pointer' }} />
+                Enabled
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: theme.text }}>
+                <span>Send at</span>
+                <input type="number" min={0} max={23} value={digestCfg.hour_utc}
+                  onChange={e => setDigestCfg(d => ({ ...d, hour_utc: +e.target.value }))}
+                  onBlur={async () => await api.updateDigestConfig({ hour_utc: digestCfg.hour_utc })}
+                  style={{ width: 50, border: `0.5px solid ${theme.border}`, borderRadius: 5, padding: '3px 6px', fontSize: 12, background: theme.inputBg, color: theme.text }} />
+                <span>:00 UTC</span>
+                <span style={{ fontSize: 11, color: theme.muted }}>
+                  ({(() => { try { return new Date(Date.UTC(2000,0,1,digestCfg.hour_utc,0)).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',timeZoneName:'short'}) } catch { return '' } })()})
+                </span>
+              </div>
+              <button onClick={async () => { await api.sendDigestNow(); alert('Digest sent!') }}
+                style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, border: `0.5px solid ${theme.border}`, background: theme.surface, color: theme.text, cursor: 'pointer' }}>
+                Send now (test)
+              </button>
+            </div>
+            {digestCfg.last_sent && (
+              <div style={{ fontSize: 11, color: theme.faint, marginTop: 8 }}>
+                Last sent: {new Date(digestCfg.last_sent).toLocaleString()}
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* Alert log */}}
         {loading ? (
           <div style={{ color: theme.muted, padding: '2rem' }}>Loading…</div>
         ) : filtered.length === 0 ? (

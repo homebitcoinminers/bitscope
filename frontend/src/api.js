@@ -57,6 +57,16 @@ export const api = {
   deleteSubnet: (id) => req('DELETE', `/scanner/subnets/${id}`),
   triggerScan: () => req('POST', '/scanner/scan'),
 
+  // HW Nonce tracking
+  deviceNonces: (mac) => req('GET', `/devices/${mac}/nonces`),
+  deviceNonceHistory: (mac, hours = 24) => req('GET', `/devices/${mac}/nonces/history?hours=${hours}`),
+  fleetNonces: () => req('GET', '/nonces/fleet'),
+
+  // Digest config
+  digestConfig: () => req('GET', '/settings/digest'),
+  updateDigestConfig: (body) => req('PATCH', '/settings/digest', body),
+  sendDigestNow: () => req('POST', '/settings/digest/send-now'),
+
   // Settings
   settings: () => req('GET', '/settings'),
   toggleDiscord: () => req('POST', '/settings/discord/toggle'),

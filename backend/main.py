@@ -15,9 +15,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from database import init_db, get_session, engine
 from models import (
     Device, MetricSnapshot, Session as DBSession,
-    ThresholdConfig, AlertLog, ScanConfig
+    ThresholdConfig, AlertLog, ScanConfig,
+    HWNonceEvent, DigestConfig,
 )
 from scanner import scan_and_discover, poll_all_devices, upsert_device, fetch_device_info, get_discord_enabled, set_discord_enabled
+import nonce_tracker
+from nonce_tracker import get_nonce_stats, get_nonce_history, send_daily_digest
 import aiohttp
 
 def isoZ(dt):
@@ -38,6 +41,7 @@ async def lifespan(app: FastAPI):
 
     scheduler.add_job(poll_all_devices, "interval", seconds=poll_interval, id="poll")
     scheduler.add_job(scan_and_discover, "interval", seconds=scan_interval, id="scan")
+    scheduler.add_job(_check_daily_digest, "interval", minutes=5, id="digest_check")
     scheduler.start()
 
     # Initial scan on startup
@@ -94,6 +98,8 @@ def list_devices(db: Session = Depends(get_session)):
             "hostname": d.hostname,
             "is_manual": d.is_manual,
             "archived": d.archived,
+            "hw_nonce_total": d.hw_nonce_total,
+            "hw_nonce_rate_1h": d.hw_nonce_rate_1h,
             "pinned_fields": json.loads(d.pinned_fields) if d.pinned_fields else [],
             "active_session_id": active_session.id if active_session else None,
             "latest": _snapshot_dict(latest) if latest else None,
@@ -129,6 +135,8 @@ def get_device(mac: str, db: Session = Depends(get_session)):
         "hostname": device.hostname,
         "is_manual": device.is_manual,
         "archived": device.archived,
+        "hw_nonce_total": device.hw_nonce_total,
+        "hw_nonce_rate_1h": device.hw_nonce_rate_1h,
         "pinned_fields": json.loads(device.pinned_fields) if device.pinned_fields else [],
         "active_session_id": active_session.id if active_session else None,
         "latest": _snapshot_dict(latest) if latest else None,
@@ -396,7 +404,10 @@ _alert_types_enabled: dict = {
     "online": True,
     "new_device": True,
     "new_best_diff": True,
+    "hw_nonce_rate": True,
+    "hw_nonce_digest": True,
 }
+
 
 @app.get("/api/settings/alerts")
 def get_alert_settings():
@@ -599,6 +610,90 @@ def export_metrics_csv(
     filename = f"bitscope_export_{tag}_{datetime.utcnow().strftime('%Y%m%d')}.csv"
     return StreamingResponse(output, media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# ── HW Nonce API ─────────────────────────────────────────────────────────────
+
+@app.get("/api/devices/{mac}/nonces")
+def get_device_nonces(mac: str, db: Session = Depends(get_session)):
+    mac = mac.upper()
+    device = db.get(Device, mac)
+    if not device:
+        raise HTTPException(404)
+    return get_nonce_stats(mac, db)
+
+
+@app.get("/api/devices/{mac}/nonces/history")
+def get_nonce_history_endpoint(mac: str, hours: int = 24, db: Session = Depends(get_session)):
+    mac = mac.upper()
+    return get_nonce_history(mac, hours, db)
+
+
+@app.get("/api/nonces/fleet")
+def fleet_nonce_summary(db: Session = Depends(get_session)):
+    """Summary of nonce activity across all devices."""
+    devices = db.exec(select(Device)).all()
+    results = []
+    for d in devices:
+        stats = get_nonce_stats(d.mac, db)
+        if stats["count_total"] > 0 or stats["rate_1h"] > 0:
+            results.append({
+                "mac": d.mac,
+                "label": d.label or d.hostname or d.mac,
+                "model": d.model,
+                **stats,
+            })
+    return sorted(results, key=lambda x: x["rate_1h"], reverse=True)
+
+
+@app.get("/api/settings/digest")
+def get_digest_config(db: Session = Depends(get_session)):
+    cfg = db.exec(select(DigestConfig)).first()
+    if not cfg:
+        cfg = DigestConfig()
+        db.add(cfg)
+        db.commit()
+        db.refresh(cfg)
+    return cfg
+
+
+@app.patch("/api/settings/digest")
+def update_digest_config(body: dict, db: Session = Depends(get_session)):
+    cfg = db.exec(select(DigestConfig)).first()
+    if not cfg:
+        cfg = DigestConfig()
+        db.add(cfg)
+    for field in ["enabled", "hour_utc", "minute_utc"]:
+        if field in body:
+            setattr(cfg, field, body[field])
+    db.commit()
+    db.refresh(cfg)
+    return cfg
+
+
+@app.post("/api/settings/digest/send-now")
+async def send_digest_now():
+    """Trigger an immediate digest send."""
+    import asyncio
+    asyncio.create_task(send_daily_digest())
+    return {"ok": True}
+
+
+async def _check_daily_digest():
+    """Check if it's time to send the daily digest."""
+    with Session(engine) as db:
+        cfg = db.exec(select(DigestConfig)).first()
+        if not cfg or not cfg.enabled:
+            return
+        now = datetime.utcnow()
+        if cfg.last_sent:
+            hours_since = (now - cfg.last_sent).total_seconds() / 3600
+            if hours_since < 23:
+                return
+        if now.hour == cfg.hour_utc and now.minute < 10:
+            await send_daily_digest()
+            cfg.last_sent = now
+            db.commit()
 
 
 # ── Settings ──────────────────────────────────────────────────────────────────

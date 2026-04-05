@@ -1,6 +1,6 @@
 import os
 from sqlmodel import SQLModel, create_engine, Session, select
-from models import ThresholdConfig, ScanConfig
+from models import ThresholdConfig, ScanConfig, DigestConfig, HWNonceEvent
 
 DATABASE_URL = f"sqlite:////data/bitscope.db"
 engine = create_engine(DATABASE_URL, echo=False)
@@ -21,6 +21,12 @@ def init_db():
         ).first()
         if not existing_type:
             session.add(ThresholdConfig(scope="type:NerdQAxe++", temp_max=70.0, vr_temp_max=75.0))
+            session.commit()
+
+        # Seed digest config if not present
+        existing_digest = session.exec(select(DigestConfig)).first()
+        if not existing_digest:
+            session.add(DigestConfig())
             session.commit()
 
         # Seed default scan subnet from env if no subnets configured

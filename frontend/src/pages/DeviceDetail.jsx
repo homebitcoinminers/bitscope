@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useContext } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts'
 import { api } from '../api.js'
 import { ThemeContext } from '../App.jsx'
 import {
@@ -37,6 +38,9 @@ export default function DeviceDetail() {
   const [compareSession, setCompareSession] = useState(null)
   const [compareMetrics, setCompareMetrics] = useState([])
   const [rawLatest, setRawLatest] = useState(null)
+  const [nonceStats, setNonceStats] = useState(null)
+  const [nonceHistory, setNonceHistory] = useState([])
+  const [nonceRange, setNonceRange] = useState(24)
 
   const loadDevice = useCallback(async () => {
     const [d, all] = await Promise.all([api.device(mac), api.thresholds()])
@@ -49,6 +53,8 @@ export default function DeviceDetail() {
     if (d.latest?.id) {
       api.rawSnapshot(mac, d.latest.id).then(setRawLatest).catch(() => {})
     }
+    // fetch nonce stats
+    api.deviceNonces(mac).then(setNonceStats).catch(() => {})
   }, [mac])
 
   const loadMetrics = useCallback(async () => {
@@ -66,6 +72,10 @@ export default function DeviceDetail() {
 
   useEffect(() => { loadDevice() }, [loadDevice])
   useEffect(() => { loadMetrics() }, [loadMetrics])
+
+  useEffect(() => {
+    api.deviceNonceHistory(mac, nonceRange).then(setNonceHistory).catch(() => {})
+  }, [mac, nonceRange])
   useEffect(() => {
     const t = setInterval(() => { loadDevice(); loadMetrics() }, 30000)
     return () => clearInterval(t)
@@ -341,6 +351,11 @@ export default function DeviceDetail() {
             </div>
           </Card>
 
+          {/* HW Nonce tracking panel */}
+          {(nonceStats?.count_total > 0 || nonceStats?.rate_1h > 0 || latest?.duplicate_hw_nonces > 0) && (
+            <NoncePanel stats={nonceStats} history={nonceHistory} range={nonceRange} onRangeChange={setNonceRange} mac={mac} />
+          )}
+
           {/* Sessions */}
           <Card>
             <SectionTitle>Test sessions</SectionTitle>
@@ -588,5 +603,132 @@ function ComparePanel({ current, previous, sessionId }) {
         })}
       </tbody>
     </table>
+  )
+}
+
+// ── HW Nonce Panel ────────────────────────────────────────────────────────────
+
+function NoncePanel({ stats, history, range, onRangeChange, mac }) {
+  const theme = useTheme()
+
+  if (!stats) return null
+
+  const level = stats.current_level
+  const levelColor = level === 'critical' ? '#e24b4a' : level === 'alert' ? '#ef9f27' : level === 'warn' ? '#ba7517' : '#639922'
+  const levelBg    = level === 'critical' ? '#fcebeb' : level === 'alert' ? '#faeeda' : level === 'warn' ? '#faeeda' : '#eaf3de'
+  const levelText  = level === 'critical' ? '#a32d2d' : level === 'alert' ? '#854f0b' : level === 'warn' ? '#854f0b' : '#3b6d11'
+  const levelLabel = level === 'critical' ? '🚨 Critical' : level === 'alert' ? '🔴 Alert' : level === 'warn' ? '⚠️ Warning' : '✅ Normal'
+
+  const ranges = [
+    { label: '1h',  hours: 1   },
+    { label: '6h',  hours: 6   },
+    { label: '24h', hours: 24  },
+    { label: '7d',  hours: 168 },
+    { label: '30d', hours: 720 },
+  ]
+
+  // Prepare bar chart data — group events into sensible buckets
+  const bucketMinutes = range <= 6 ? 10 : range <= 24 ? 30 : range <= 168 ? 360 : 1440
+  const buckets = {}
+  history.forEach(e => {
+    const ts = new Date(e.ts)
+    const rounded = new Date(Math.floor(ts.getTime() / (bucketMinutes * 60000)) * (bucketMinutes * 60000))
+    const key = rounded.toISOString()
+    buckets[key] = (buckets[key] || 0) + e.delta
+  })
+  const chartData = Object.entries(buckets).sort(([a], [b]) => a.localeCompare(b)).map(([ts, count]) => ({
+    ts,
+    count,
+    label: new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  }))
+
+  const statCell = (label, value, color) => (
+    <div style={{ background: theme.statBg, borderRadius: 7, padding: '10px 12px', flex: 1 }}>
+      <div style={{ fontSize: 10, color: theme.faint, marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 500, color: color || theme.text }}>{value ?? '—'}</div>
+    </div>
+  )
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontWeight: 500, fontSize: 13, color: theme.text }}>HW Nonce tracking</div>
+          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: levelBg, color: levelText, fontWeight: 500 }}>
+            {levelLabel}
+          </span>
+          {stats.consecutive_polls_breaching > 0 && (
+            <span style={{ fontSize: 10, color: theme.muted }}>
+              {stats.consecutive_polls_breaching} consecutive polls breaching
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {ranges.map(r => (
+            <button key={r.label} onClick={() => onRangeChange(r.hours)} style={{
+              fontSize: 10, padding: '2px 7px', borderRadius: 4,
+              border: `0.5px solid ${theme.border}`,
+              background: range === r.hours ? theme.accent : 'transparent',
+              color: range === r.hours ? '#fff' : theme.muted,
+              cursor: 'pointer',
+            }}>{r.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {statCell('Rate (1h)', stats.rate_1h != null ? `${stats.rate_1h.toFixed(2)}/hr` : '—', level ? levelColor : '#639922')}
+        {statCell('Rate (24h avg)', stats.rate_24h != null ? `${stats.rate_24h.toFixed(2)}/hr` : '—', theme.text)}
+        {statCell('Last 1h', stats.count_1h ?? '—', stats.count_1h > 0 ? levelColor : '#639922')}
+        {statCell('Last 24h', stats.count_24h ?? '—', stats.count_24h > 0 ? '#854f0b' : '#639922')}
+        {statCell('Last 7d', stats.count_7d ?? '—', stats.count_7d > 0 ? '#854f0b' : '#639922')}
+        {statCell('All-time', stats.count_total ?? '—', stats.count_total > 0 ? '#854f0b' : '#639922')}
+      </div>
+
+      {/* Bar chart */}
+      {chartData.length > 0 ? (
+        <div>
+          <div style={{ fontSize: 11, color: theme.muted, marginBottom: 4 }}>
+            Nonce events — {ranges.find(r => r.hours === range)?.label || '24h'} (each bar = {bucketMinutes < 60 ? `${bucketMinutes}m` : `${bucketMinutes / 60}h`} window)
+          </div>
+          <ResponsiveContainer width="100%" height={120}>
+            <BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={theme.border} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 9, fill: theme.muted }} axisLine={false} tickLine={false} minTickGap={30} />
+              <YAxis tick={{ fontSize: 9, fill: theme.muted }} axisLine={false} tickLine={false} width={24} allowDecimals={false} />
+              <Tooltip
+                contentStyle={{ background: theme.surface, border: `0.5px solid ${theme.border}`, borderRadius: 6, fontSize: 11 }}
+                formatter={(val) => [`${val} nonce${val !== 1 ? 's' : ''}`, 'Count']}
+                labelFormatter={(label) => `Window: ${label}`}
+              />
+              <Bar dataKey="count" fill={levelColor} radius={[2, 2, 0, 0]} maxBarSize={20} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', padding: '1rem', color: theme.faint, fontSize: 12 }}>
+          No nonce events in selected time range — ✅ clean
+        </div>
+      )}
+
+      {/* First / last event timestamps */}
+      {stats.first_event && (
+        <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 11, color: theme.muted }}>
+          <span>First event: {new Date(stats.first_event).toLocaleString()}</span>
+          {stats.last_event && <span>Last event: {new Date(stats.last_event).toLocaleString()}</span>}
+          <span>{stats.event_count} total event{stats.event_count !== 1 ? 's' : ''} recorded</span>
+        </div>
+      )}
+
+      {/* Advice */}
+      {level && (
+        <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 6, background: levelBg, fontSize: 12, color: levelText }}>
+          {level === 'critical' && '🚨 Dead ASIC core likely. Do not sell this unit. Consider replacing or selling as faulty/parts.'}
+          {level === 'alert'    && '🔴 ASIC core degrading. Reduce frequency and voltage. Monitor closely before selling.'}
+          {level === 'warn'     && '⚠️ Possible fault developing. Continue monitoring — check if rate is increasing over time.'}
+        </div>
+      )}
+    </Card>
   )
 }

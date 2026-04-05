@@ -35,7 +35,9 @@ const ALL_COLS = [
   { key: 'temp',           label: 'ASIC temp',        group: 'Thermal',      default: true  },
   { key: 'vr_temp',        label: 'VR temp',          group: 'Thermal',      default: false },
   { key: 'max_temp_24h',   label: 'Max temp 24h',     group: 'Thermal',      default: true  },
-  { key: 'hw_nonces',      label: 'HW nonces',        group: 'Thermal',      default: false },
+  { key: 'hw_nonces',      label: 'HW nonces (now)',  group: 'Thermal',      default: false },
+  { key: 'hw_nonce_rate',  label: 'Nonce rate /hr',   group: 'Thermal',      default: true  },
+  { key: 'hw_nonce_total', label: 'Nonces all-time',  group: 'Thermal',      default: false },
   // Power
   { key: 'power',          label: 'Power (W)',        group: 'Power',        default: true  },
   { key: 'voltage',        label: 'Input voltage',    group: 'Power',        default: false },
@@ -164,6 +166,8 @@ export default function Devices() {
       case 'vr_temp':       return v(l?.vr_temp)
       case 'max_temp_24h':  return maxTemps[d.mac] || 0
       case 'hw_nonces':     return v(l?.duplicate_hw_nonces)
+      case 'hw_nonce_rate': return d.hw_nonce_rate_1h || 0
+      case 'hw_nonce_total':return d.hw_nonce_total || 0
       case 'power':         return v(l?.power)
       case 'voltage':       return v(l?.voltage)
       case 'current':       return v(l?.current)
@@ -431,6 +435,16 @@ function DeviceTable({ devices, cols, sortKey, sortDir, onSort, isOnline, isArch
         return mt ? fmtTemp(mt) : na
       }
       case 'hw_nonces':      return online && l?.duplicate_hw_nonces != null ? <span style={{ color: l.duplicate_hw_nonces > 0 ? '#c0392b' : theme.muted }}>{l.duplicate_hw_nonces}</span> : na
+      case 'hw_nonce_rate': {
+        const r = d.hw_nonce_rate_1h
+        if (!r && r !== 0) return na
+        const c = r >= 20 ? '#c0392b' : r >= 5 ? '#ef9f27' : r >= 1 ? '#ba7517' : '#639922'
+        return <span style={{ color: c, fontWeight: r > 0 ? 500 : 400 }}>{r > 0 ? `${r.toFixed(1)}/hr` : '0'}</span>
+      }
+      case 'hw_nonce_total': {
+        const t = d.hw_nonce_total
+        return <span style={{ color: t > 0 ? '#854f0b' : theme.muted }}>{t > 0 ? t.toLocaleString() : '0'}</span>
+      }
       case 'power':          return online && l?.power ? <span>{l.power.toFixed(0)} W</span> : na
       case 'voltage':        return online && l?.voltage ? <span style={{ color: theme.muted }}>{(l.voltage / 1000).toFixed(2)} V</span> : na
       case 'current':        return online && l?.current ? <span style={{ color: theme.muted }}>{(l.current / 1000).toFixed(2)} A</span> : na
