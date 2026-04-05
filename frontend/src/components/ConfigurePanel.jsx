@@ -109,7 +109,7 @@ export default function ConfigurePanel({ mac, device, latest, onClose }) {
 
   // System state
   const [sys, setSys] = useState({
-    hostname: '', autofanspeed: true, fanspeed: 50, temptarget: 60,
+    hostname: '', autofanspeed: false, fanspeed: 100, temptarget: 60,
     displayTimeout: -1, statsFrequency: 120, overheat_temp: 70, restart: false,
   })
 
@@ -133,8 +133,8 @@ export default function ConfigurePanel({ mac, device, latest, onClose }) {
     setSys(s => ({
       ...s,
       hostname: device?.hostname || '',
-      autofanspeed: latest.fan_speed > 0,
-      fanspeed: latest.fan_speed || 50,
+      autofanspeed: false,
+      fanspeed: 100,
       overheat_temp: 70,
     }))
     setTuning(t => ({
@@ -384,11 +384,17 @@ export default function ConfigurePanel({ mac, device, latest, onClose }) {
 
                   {asicInfo ? (
                     <>
-                      <Field label="Frequency (MHz)" desc={`Default: ${asicInfo.defaultFrequency} MHz`}>
-                        <SelectInput value={tuning.frequency} onChange={t('frequency')} options={freqOptions} />
+                      <Field label="Frequency (MHz)" desc={`Default: ${asicInfo.defaultFrequency} MHz — select a preset or type any value`}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 8 }}>
+                          <SelectInput value={freqOptions.find(o => o.value === tuning.frequency) ? tuning.frequency : ''} onChange={v => v && t('frequency')(v)} options={[{ value: '', label: 'Select preset…' }, ...freqOptions]} />
+                          <TInput value={tuning.frequency ?? ''} onChange={v => t('frequency')(Number(v) || tuning.frequency)} placeholder="e.g. 735" />
+                        </div>
                       </Field>
-                      <Field label="Core voltage (mV)" desc={`Default: ${asicInfo.defaultVoltage} mV`}>
-                        <SelectInput value={tuning.coreVoltage} onChange={t('coreVoltage')} options={voltOptions} />
+                      <Field label="Core voltage (mV)" desc={`Default: ${asicInfo.defaultVoltage} mV — select a preset or type any value`}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 8 }}>
+                          <SelectInput value={voltOptions.find(o => o.value === tuning.coreVoltage) ? tuning.coreVoltage : ''} onChange={v => v && t('coreVoltage')(v)} options={[{ value: '', label: 'Select preset…' }, ...voltOptions]} />
+                          <TInput value={tuning.coreVoltage ?? ''} onChange={v => t('coreVoltage')(Number(v) || tuning.coreVoltage)} placeholder="e.g. 1150" />
+                        </div>
                       </Field>
                     </>
                   ) : (

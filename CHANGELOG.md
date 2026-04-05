@@ -1,5 +1,15 @@
 # BitScope Changelog
 
+## v0.4.1 — 2026-04-05
+
+### Fixed
+- **Profiles recursion crash** — `ensure_dir()` called `save_profile()` which called `ensure_dir()` again infinitely. Fixed by writing the default profile file directly in `ensure_dir` without calling `save_profile`, and by calling `PROFILES_DIR.mkdir()` directly in `save_profile` without calling `ensure_dir`
+- **Frequency tuning** — the preset dropdown only showed options from `frequencyOptions[]` (e.g. up to 600 MHz) but NerdQAxe++ units can run at 735 MHz or higher. Now shows both a preset dropdown AND a free-text number input so any value can be entered
+- **Profile dropdown missing** — was empty because profiles couldn't be created (recursion crash). Now seeds correctly on first boot
+- **Default fan** — configure panel and new profiles now default to manual fan 100% instead of auto, matching typical pre-sale test setup
+
+---
+
 ## v0.4.0 — 2026-04-05
 
 ### Added

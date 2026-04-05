@@ -50,7 +50,7 @@ export default function Profiles() {
         fallbackStratumUser: 'bc1qd2gz9h8zwh2stga6lrfh95p8c5w3qc96w2g57c.hbm',
         fallbackStratumPassword: 'x', fallbackStratumTLS: false,
       },
-      system: { autofanspeed: true, temptarget: 60, displayTimeout: -1, statsFrequency: 120, overheat_temp: 70 },
+      system: { autofanspeed: false, fanspeed: 100, temptarget: 60, displayTimeout: -1, statsFrequency: 120, overheat_temp: 70 },
     }
     setSelected(blank)
     setForm(blank)

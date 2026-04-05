@@ -1,10 +1,9 @@
 """
 Profile system — stored as JSON files in /data/profiles/
-Each profile is a dict of pool/system settings that can be applied to devices.
 """
 import json
-import os
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -28,7 +27,8 @@ DEFAULT_PROFILE = {
         "fallbackStratumTLS": False,
     },
     "system": {
-        "autofanspeed": True,
+        "autofanspeed": False,
+        "fanspeed": 100,
         "temptarget": 60,
         "displayTimeout": -1,
         "statsFrequency": 120,
@@ -40,11 +40,15 @@ DEFAULT_PROFILE = {
 
 
 def ensure_dir():
+    """Create profiles directory if it doesn't exist. Seed default profile if empty."""
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
-    # Seed default profile if no profiles exist
-    if not list(PROFILES_DIR.glob("*.json")):
-        save_profile("hbm_default", DEFAULT_PROFILE)
-        logger.info("Seeded default profile")
+    default_path = PROFILES_DIR / "hbm_default.json"
+    # Only seed if the default file doesn't exist — avoids any recursion
+    if not default_path.exists():
+        data = {k: v for k, v in DEFAULT_PROFILE.items() if k != "_id"}
+        with open(default_path, "w") as f:
+            json.dump(data, f, indent=2)
+        logger.info("Seeded default profile: hbm_default")
 
 
 def list_profiles() -> list[dict]:
@@ -77,16 +81,17 @@ def get_profile(profile_id: str) -> dict | None:
 
 
 def save_profile(profile_id: str, data: dict) -> dict:
-    ensure_dir()
-    # Clean id from data before saving
-    data = {k: v for k, v in data.items() if k != "_id"}
-    data.setdefault("created_at", datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))
+    # Ensure directory exists directly — no recursion
+    PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+    # Remove internal _id before saving to file
+    clean = {k: v for k, v in data.items() if k != "_id"}
+    clean.setdefault("created_at", datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))
     path = PROFILES_DIR / f"{profile_id}.json"
     with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-    data["_id"] = profile_id
+        json.dump(clean, f, indent=2)
+    clean["_id"] = profile_id
     logger.info(f"Saved profile: {profile_id}")
-    return data
+    return clean
 
 
 def delete_profile(profile_id: str) -> bool:
@@ -99,7 +104,6 @@ def delete_profile(profile_id: str) -> bool:
 
 
 def profile_from_device_snapshot(raw: dict, name: str) -> dict:
-    """Create a profile from a live device API snapshot."""
     return {
         "name": name,
         "description": f"Captured from {raw.get('hostname', 'unknown')} on {datetime.utcnow().strftime('%Y-%m-%d')}",
@@ -116,7 +120,8 @@ def profile_from_device_snapshot(raw: dict, name: str) -> dict:
             "fallbackStratumTLS": raw.get("fallbackStratumTLS", False),
         },
         "system": {
-            "autofanspeed": raw.get("autofanspeed", True),
+            "autofanspeed": bool(raw.get("autofanspeed", True)),
+            "fanspeed": raw.get("fanspeed", 100),
             "temptarget": raw.get("temptarget", 60),
             "displayTimeout": raw.get("displayTimeout", -1),
             "statsFrequency": raw.get("statsFrequency", 0),
