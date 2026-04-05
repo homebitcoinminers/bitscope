@@ -39,18 +39,30 @@ function ProfileTog({ value, onChange }) {
   )
 }
 
+function ProfileInp({ value, onChange, placeholder, mono, type = 'text' }) {
+  const theme = useTheme()
+  return (
+    <input
+      type={type}
+      value={value ?? ''}
+      onChange={e => onChange(type === 'number' ? Number(e.target.value) : e.target.value)}
+      placeholder={placeholder}
+      style={{ width: '100%', border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '5px 10px', fontSize: 12, background: theme.inputBg, color: theme.text, fontFamily: mono ? 'monospace' : 'inherit', outline: 'none' }}
+    />
+  )
+}
+
 function ProfilePoolSection({ prefix, label, dot, form, onChange }) {
   const theme = useTheme()
-  const inp = { border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '5px 10px', fontSize: 12, background: theme.inputBg, color: theme.text, outline: 'none', width: '100%' }
   return (
     <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: 14, marginBottom: 12, background: theme.statBg }}>
       <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, display: 'inline-block' }} />{label}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <PF label="URL"><input value={form[`${prefix}URL`] || ''} onChange={e => onChange(`${prefix}URL`, e.target.value)} style={inp} /></PF>
-        <PF label="Port"><input type="number" value={form[`${prefix}Port`] || ''} onChange={e => onChange(`${prefix}Port`, Number(e.target.value))} style={inp} /></PF>
-        <PF label="Worker"><input value={form[`${prefix}User`] || ''} onChange={e => onChange(`${prefix}User`, e.target.value)} style={{ ...inp, fontFamily: 'monospace', fontSize: 11 }} /></PF>
+        <PF label="URL"><ProfileInp value={form[`${prefix}URL`] || ''} onChange={v => onChange(`${prefix}URL`, v)} /></PF>
+        <PF label="Port"><ProfileInp type="number" value={form[`${prefix}Port`] || ''} onChange={v => onChange(`${prefix}Port`, Number(v))} /></PF>
+        <PF label="Worker"><ProfileInp value={form[`${prefix}User`] || ''} onChange={v => onChange(`${prefix}User`, v)} mono /></PF>
         <PF label="Password"><PasswordInp value={form[`${prefix}Password`] || ''} onChange={v => onChange(`${prefix}Password`, v)} placeholder="x" /></PF>
         <PF label="TLS"><ProfileTog value={!!form[`${prefix}TLS`]} onChange={v => onChange(`${prefix}TLS`, v)} /></PF>
       </div>
@@ -58,23 +70,26 @@ function ProfilePoolSection({ prefix, label, dot, form, onChange }) {
   )
 }
 
-function ROPoolCard({ label, dot, prefix, p, theme }) {
-  const Row = ({ label: l, value, mono }) => (
+function ProfileRow({ label, value, mono, theme }) {
+  return (
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: `0.5px solid ${theme.border}`, fontSize: 12 }}>
-      <span style={{ color: theme.muted, flexShrink: 0 }}>{l}</span>
-      <span style={{ color: theme.text, fontFamily: mono ? 'monospace' : 'inherit', fontSize: mono ? 11 : 12, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value ?? '—'}</span>
+      <span style={{ color: theme.muted, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: theme.text, fontFamily: mono ? 'monospace' : 'inherit', fontSize: mono ? 11 : 12, maxWidth: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value ?? '—'}</span>
     </div>
   )
+}
+
+function ROPoolCard({ label, dot, prefix, p, theme }) {
   return (
     <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: 12 }}>
       <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, display: 'inline-block' }} />{label}
       </div>
-      <Row label="URL"      value={p[`${prefix}URL`]} mono />
-      <Row label="Port"     value={p[`${prefix}Port`]} />
-      <Row label="Worker"   value={p[`${prefix}User`]} mono />
-      <Row label="TLS"      value={p[`${prefix}TLS`] ? 'Yes' : 'No'} />
-      <Row label="Password" value={p[`${prefix}Password`] ? '••••' : '—'} />
+      <ProfileRow label="URL"      value={p[`${prefix}URL`]}              mono theme={theme} />
+      <ProfileRow label="Port"     value={p[`${prefix}Port`]}                  theme={theme} />
+      <ProfileRow label="Worker"   value={p[`${prefix}User`]}             mono theme={theme} />
+      <ProfileRow label="TLS"      value={p[`${prefix}TLS`] ? 'Yes' : 'No'}   theme={theme} />
+      <ProfileRow label="Password" value={p[`${prefix}Password`] ? '••••' : '—'} theme={theme} />
     </div>
   )
 }
@@ -208,8 +223,8 @@ export default function Profiles() {
               {editing ? (
                 <div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-                    <PF label="Profile name"><input value={form.name || ''} onChange={e => sp('name')(e.target.value)} style={inp} /></PF>
-                    <PF label="Description"><input value={form.description || ''} onChange={e => sp('description')(e.target.value)} style={inp} placeholder="Optional" /></PF>
+                    <PF label="Profile name"><ProfileInp value={form.name || ''} onChange={sp('name')} /></PF>
+                    <PF label="Description"><ProfileInp value={form.description || ''} onChange={sp('description')} placeholder="Optional" /></PF>
                   </div>
 
                   {/* Pool editor */}
@@ -223,18 +238,18 @@ export default function Profiles() {
                     <div>
                       <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>Hostname</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10, marginBottom: 14 }}>
-                        <PF label="Hostname template" ><input value={form.hostname_template || ''} onChange={e => sp('hostname_template')(e.target.value)} style={{ ...inp, fontFamily: 'monospace' }} placeholder="{devicename}_{last4mac}" /></PF>
+                        <PF label="Hostname template" ><input value={form.hostname_template || ''} onChange={e => sp('hostname_template')(e.target.value)} mono placeholder="{model}-{last4mac}" /></PF>
                         <div style={{ fontSize: 11, color: theme.muted }}>Tokens: <code style={{ background: theme.statBg, padding: '1px 4px', borderRadius: 3 }}>{'{devicename}'}</code> <code style={{ background: theme.statBg, padding: '1px 4px', borderRadius: 3 }}>{'{model}'}</code> <code style={{ background: theme.statBg, padding: '1px 4px', borderRadius: 3 }}>{'{last4mac}'}</code> <code style={{ background: theme.statBg, padding: '1px 4px', borderRadius: 3 }}>{'{mac}'}</code></div>
                       </div>
                       <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>WiFi (leave blank to skip)</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-                        <PF label="SSID"><input value={form.wifi_ssid || ''} onChange={e => sp('wifi_ssid')(e.target.value)} style={inp} /></PF>
-                        <PF label="Password"><input value={form.wifi_password || ''} onChange={e => sp('wifi_password')(e.target.value)} style={inp} /></PF>
+                        <PF label="SSID"><ProfileInp value={form.wifi_ssid || ''} onChange={sp('wifi_ssid')} /></PF>
+                        <PF label="Password"><PasswordInp value={form.wifi_password || ''} onChange={sp('wifi_password')} placeholder="" /></PF>
                       </div>
                       <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>Display & logging</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                        <PF label="Display timeout (min)"><input type="number" value={form.displayTimeout ?? -1} onChange={e => sp('displayTimeout')(Number(e.target.value))} style={inp} /></PF>
-                        <PF label="Stats frequency (s)"><input type="number" value={form.statsFrequency || 0} onChange={e => sp('statsFrequency')(Number(e.target.value))} style={inp} /></PF>
+                        <PF label="Display timeout (min)"><ProfileInp type="number" value={form.displayTimeout ?? -1} onChange={sp('displayTimeout')} /></PF>
+                        <PF label="Stats frequency (s)"><ProfileInp type="number" value={form.statsFrequency || 0} onChange={sp('statsFrequency')} /></PF>
                       </div>
                     </div>
                   )}
@@ -247,7 +262,7 @@ export default function Profiles() {
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
                         <PF label="Model lock (required)">
-                          <input value={form.model_lock || ''} onChange={e => sp('model_lock')(e.target.value)} style={inp} placeholder="NerdQAxe++" />
+                          <ProfileInp value={form.model_lock || ''} onChange={sp('model_lock')} placeholder="NerdQAxe++" />
                         </PF>
                         <PF label="Factory defaults only">
                           <ProfileTog value={!!form.use_factory_defaults} onChange={v => setForm(f => ({...f, use_factory_defaults: v}))} />
@@ -257,16 +272,16 @@ export default function Profiles() {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
                         <PF label="Auto fan speed"><ProfileTog value={!!form.autofanspeed} onChange={v => setForm(f => ({...f, autofanspeed: v}))} /></PF>
                         {form.autofanspeed
-                          ? <PF label="Target temp (°C)"><input type="number" value={form.temptarget || ''} onChange={e => sp('temptarget')(Number(e.target.value))} style={inp} /></PF>
-                          : <PF label="Manual fan speed (%)"><input type="number" value={form.fanspeed ?? 100} onChange={e => sp('fanspeed')(Number(e.target.value))} style={inp} /></PF>
+                          ? <PF label="Target temp (°C)"><ProfileInp type="number" value={form.temptarget || ''} onChange={sp('temptarget')} /></PF>
+                          : <PF label="Manual fan speed (%)"><ProfileInp type="number" value={form.fanspeed ?? 100} onChange={sp('fanspeed')} /></PF>
                         }
-                        <PF label="Overheat temp (°C)"><input type="number" value={form.overheat_temp || ''} onChange={e => sp('overheat_temp')(Number(e.target.value))} style={inp} /></PF>
+                        <PF label="Overheat temp (°C)"><ProfileInp type="number" value={form.overheat_temp || ''} onChange={sp('overheat_temp')} /></PF>
                       </div>
                       {!form.use_factory_defaults && <>
                         <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>ASIC tuning</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                          <PF label="Frequency (MHz)"><input type="number" value={form.frequency ?? ''} onChange={e => sp('frequency')(e.target.value ? Number(e.target.value) : null)} style={inp} placeholder="e.g. 735" /></PF>
-                          <PF label="Core voltage (mV)"><input type="number" value={form.coreVoltage ?? ''} onChange={e => sp('coreVoltage')(e.target.value ? Number(e.target.value) : null)} style={inp} placeholder="e.g. 1150" /></PF>
+                          <PF label="Frequency (MHz)"><ProfileInp type="number" value={form.frequency ?? ''} onChange={v => sp('frequency')(v ? Number(v) : null)} placeholder="e.g. 735" /></PF>
+                          <PF label="Core voltage (mV)"><ProfileInp type="number" value={form.coreVoltage ?? ''} onChange={v => sp('coreVoltage')(v ? Number(v) : null)} placeholder="e.g. 1150" /></PF>
                         </div>
                       </>}
                     </div>
@@ -274,7 +289,7 @@ export default function Profiles() {
                 </div>
               ) : (
                 // Read-only view
-                <ReadOnly profile={selected} theme={theme} />
+                <ReadOnly profile={selected} />
               )}
             </Card>
 
@@ -297,7 +312,9 @@ export default function Profiles() {
   )
 }
 
-function ReadOnly({ profile: p, theme }) {
+function ReadOnly({ profile: p }) {
+  const theme = useTheme()
+  const R = ({ label, value, mono }) => <ProfileRow label={label} value={value} mono={mono} theme={theme} />
 
   return (
     <div>
@@ -312,22 +329,23 @@ function ReadOnly({ profile: p, theme }) {
 
       {p.type === 'system' && (
         <div>
-          <Row label="Hostname template" value={p.hostname_template} mono />
-          <Row label="WiFi SSID" value={p.wifi_ssid || '(not set)'} />
-          <Row label="Display timeout" value={p.displayTimeout != null ? `${p.displayTimeout}m` : '—'} />
-          <Row label="Stats frequency" value={p.statsFrequency ? `${p.statsFrequency}s` : 'disabled'} />
+          <R label="Hostname template" value={p.hostname_template} mono />
+          <R label="WiFi SSID"         value={p.wifi_ssid || '(not set)'} />
+          <R label="Display timeout"   value={p.displayTimeout != null ? `${p.displayTimeout}m` : '—'} />
+          <R label="Stats frequency"   value={p.statsFrequency ? `${p.statsFrequency}s` : 'disabled'} />
+          {p.created_at && <div style={{ fontSize: 10, color: theme.faint, marginTop: 8 }}>Created: {new Date(p.created_at).toLocaleDateString()}</div>}
         </div>
       )}
 
       {p.type === 'hardware' && (
         <div>
-          <Row label="Model lock" value={p.model_lock || 'None'} />
-          <Row label="Fan" value={p.autofanspeed ? `Auto (target ${p.temptarget}°C)` : `Manual ${p.fanspeed ?? 100}%`} />
-          <Row label="Overheat temp" value={p.overheat_temp ? `${p.overheat_temp}°C` : '—'} />
-          <Row label="Factory defaults" value={p.use_factory_defaults ? 'Yes' : 'No'} />
+          <R label="Model lock"      value={p.model_lock || 'None'} />
+          <R label="Fan"             value={p.autofanspeed ? `Auto (target ${p.temptarget}°C)` : `Manual ${p.fanspeed ?? 100}%`} />
+          <R label="Overheat temp"   value={p.overheat_temp ? `${p.overheat_temp}°C` : '—'} />
+          <R label="Factory defaults" value={p.use_factory_defaults ? 'Yes — revert to firmware defaults' : 'No — custom values'} />
           {!p.use_factory_defaults && <>
-            <Row label="Frequency" value={p.frequency ? `${p.frequency} MHz` : '(not set)'} />
-            <Row label="Core voltage" value={p.coreVoltage ? `${p.coreVoltage} mV` : '(not set)'} />
+            <R label="Frequency"    value={p.frequency ? `${p.frequency} MHz` : '(not set)'} />
+            <R label="Core voltage" value={p.coreVoltage ? `${p.coreVoltage} mV` : '(not set)'} />
           </>}
           {p.created_at && <div style={{ fontSize: 10, color: theme.faint, marginTop: 8 }}>Created: {new Date(p.created_at).toLocaleDateString()}{p.source_model ? ` · From: ${p.source_model}` : ''}</div>}
         </div>

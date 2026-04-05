@@ -1,5 +1,13 @@
 # BitScope Changelog
 
+## v0.5.3 — 2026-04-05
+
+### Fixed
+- **Profiles page blank screen for System and Hardware types** — `ReadOnly` component was receiving `theme` as a prop but calling it like a hook value, crashing on render. Fixed by using `useTheme()` hook inside `ReadOnly` directly. Also `Row` sub-component was still defined inside `ReadOnly` (same inline-component focus bug). Extracted to module-level `ProfileRow` component
+- **`inp` style variable undefined** — editor fields for system/hardware profiles referenced an `inp` style object that was only defined inside `ProfilePoolSection`. Replaced all raw `<input style={inp}>` elements with a new `ProfileInp` component defined at module level
+
+---
+
 ## v0.5.2 — 2026-04-05
 
 ### Fixed
