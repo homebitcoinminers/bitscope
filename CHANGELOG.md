@@ -1,5 +1,14 @@
 # BitScope Changelog
 
+## v0.4.3 — 2026-04-05
+
+### Fixed
+- **Fallback password missing from configure panel** — field existed in state and payload but was never rendered in the pool tab. Fixed, apply button wrapper div also repaired
+- **Profile editor layout** — completely redesigned: primary pool and fallback pool now shown as separate cards with coloured dot indicators (green for primary, grey for fallback), system settings in a third card below. Read-only view mirrors the same card structure
+- **Fan speed field in profiles** — manual fan speed field now appears conditionally when auto fan is disabled
+
+---
+
 ## v0.4.2 — 2026-04-05
 
 ### Fixed

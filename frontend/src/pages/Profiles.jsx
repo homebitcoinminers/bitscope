@@ -127,72 +127,115 @@ export default function Profiles() {
                     <input value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={inp} placeholder="Optional description" />
                   </div>
 
-                  <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>Pool settings</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                    <F label="Pool URL"><input value={form.pool?.stratumURL || ''} onChange={e => sp('pool','stratumURL')(e.target.value)} style={inp} /></F>
-                    <F label="Port"><input type="number" value={form.pool?.stratumPort || ''} onChange={e => sp('pool','stratumPort')(Number(e.target.value))} style={inp} /></F>
-                    <F label="Worker"><input value={form.pool?.stratumUser || ''} onChange={e => sp('pool','stratumUser')(e.target.value)} style={{ ...inp, fontFamily: 'monospace' }} /></F>
-                    <F label="Password"><input value={form.pool?.stratumPassword || ''} onChange={e => sp('pool','stratumPassword')(e.target.value)} style={inp} placeholder="x" /></F>
-                    <F label="TLS">
-                      <Tog value={form.pool?.stratumTLS} onChange={sp('pool','stratumTLS')} />
-                    </F>
-                    <F label="Fallback URL"><input value={form.pool?.fallbackStratumURL || ''} onChange={e => sp('pool','fallbackStratumURL')(e.target.value)} style={inp} /></F>
-                    <F label="Fallback port"><input type="number" value={form.pool?.fallbackStratumPort || ''} onChange={e => sp('pool','fallbackStratumPort')(Number(e.target.value))} style={inp} /></F>
-                    <F label="Fallback worker"><input value={form.pool?.fallbackStratumUser || ''} onChange={e => sp('pool','fallbackStratumUser')(e.target.value)} style={{ ...inp, fontFamily: 'monospace' }} /></F>
-                    <F label="Fallback password"><input value={form.pool?.fallbackStratumPassword || ''} onChange={e => sp('pool','fallbackStratumPassword')(e.target.value)} style={inp} placeholder="x" /></F>
-                    <F label="Fallback TLS">
-                      <Tog value={form.pool?.fallbackStratumTLS} onChange={sp('pool','fallbackStratumTLS')} />
-                    </F>
+                  {/* Primary pool card */}
+                  <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '14px', marginBottom: 12, background: theme.statBg }}>
+                    <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#639922', display: 'inline-block' }} />
+                      Primary pool
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <F label="Pool URL"><input value={form.pool?.stratumURL || ''} onChange={e => sp('pool','stratumURL')(e.target.value)} style={inp} placeholder="pool.example.com" /></F>
+                      <F label="Port"><input type="number" value={form.pool?.stratumPort || ''} onChange={e => sp('pool','stratumPort')(Number(e.target.value))} style={inp} /></F>
+                      <F label="Worker"><input value={form.pool?.stratumUser || ''} onChange={e => sp('pool','stratumUser')(e.target.value)} style={{ ...inp, fontFamily: 'monospace', fontSize: 11 }} /></F>
+                      <F label="Password"><input value={form.pool?.stratumPassword || ''} onChange={e => sp('pool','stratumPassword')(e.target.value)} style={inp} placeholder="x" /></F>
+                      <F label="TLS"><Tog value={form.pool?.stratumTLS} onChange={sp('pool','stratumTLS')} /></F>
+                    </div>
                   </div>
 
-                  <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>System settings</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <F label="Target temp (°C)"><input type="number" value={form.system?.temptarget || ''} onChange={e => sp('system','temptarget')(Number(e.target.value))} style={inp} /></F>
-                    <F label="Overheat temp (°C)"><input type="number" value={form.system?.overheat_temp || ''} onChange={e => sp('system','overheat_temp')(Number(e.target.value))} style={inp} /></F>
-                    <F label="Display timeout (min)"><input type="number" value={form.system?.displayTimeout ?? -1} onChange={e => sp('system','displayTimeout')(Number(e.target.value))} style={inp} /></F>
-                    <F label="Stats frequency (s)"><input type="number" value={form.system?.statsFrequency || 0} onChange={e => sp('system','statsFrequency')(Number(e.target.value))} style={inp} /></F>
-                    <F label="Auto fan speed">
-                      <Tog value={form.system?.autofanspeed} onChange={sp('system','autofanspeed')} />
-                    </F>
+                  {/* Fallback pool card */}
+                  <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '14px', marginBottom: 14, background: theme.statBg }}>
+                    <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: theme.faint, display: 'inline-block' }} />
+                      Fallback pool
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <F label="Pool URL"><input value={form.pool?.fallbackStratumURL || ''} onChange={e => sp('pool','fallbackStratumURL')(e.target.value)} style={inp} placeholder="ausolo.ckpool.org" /></F>
+                      <F label="Port"><input type="number" value={form.pool?.fallbackStratumPort || ''} onChange={e => sp('pool','fallbackStratumPort')(Number(e.target.value))} style={inp} /></F>
+                      <F label="Worker"><input value={form.pool?.fallbackStratumUser || ''} onChange={e => sp('pool','fallbackStratumUser')(e.target.value)} style={{ ...inp, fontFamily: 'monospace', fontSize: 11 }} /></F>
+                      <F label="Password"><input value={form.pool?.fallbackStratumPassword || ''} onChange={e => sp('pool','fallbackStratumPassword')(e.target.value)} style={inp} placeholder="x" /></F>
+                      <F label="TLS"><Tog value={form.pool?.fallbackStratumTLS} onChange={sp('pool','fallbackStratumTLS')} /></F>
+                    </div>
+                  </div>
+
+                  {/* System card */}
+                  <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '14px', background: theme.statBg }}>
+                    <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 12 }}>System settings</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <F label="Target temp (°C)"><input type="number" value={form.system?.temptarget || ''} onChange={e => sp('system','temptarget')(Number(e.target.value))} style={inp} /></F>
+                      <F label="Overheat temp (°C)"><input type="number" value={form.system?.overheat_temp || ''} onChange={e => sp('system','overheat_temp')(Number(e.target.value))} style={inp} /></F>
+                      <F label="Display timeout (min)"><input type="number" value={form.system?.displayTimeout ?? -1} onChange={e => sp('system','displayTimeout')(Number(e.target.value))} style={inp} /></F>
+                      <F label="Stats frequency (s)"><input type="number" value={form.system?.statsFrequency || 0} onChange={e => sp('system','statsFrequency')(Number(e.target.value))} style={inp} /></F>
+                      <F label="Auto fan speed"><Tog value={form.system?.autofanspeed} onChange={sp('system','autofanspeed')} /></F>
+                      {!form.system?.autofanspeed && (
+                        <F label="Manual fan speed (%)"><input type="number" value={form.system?.fanspeed ?? 100} min={0} max={100} onChange={e => sp('system','fanspeed')(Number(e.target.value))} style={inp} /></F>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (
-                // Read-only view
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <div>
-                    <div style={{ fontWeight: 500, fontSize: 11, color: theme.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pool</div>
-                    {[
-                      ['URL', selected.pool?.stratumURL],
-                      ['Port', selected.pool?.stratumPort],
-                      ['Worker', selected.pool?.stratumUser],
-                      ['TLS', selected.pool?.stratumTLS ? 'Yes' : 'No'],
-                      ['Fallback URL', selected.pool?.fallbackStratumURL],
-                      ['Fallback port', selected.pool?.fallbackStratumPort],
-                    ].map(([k, v]) => v != null && (
-                      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `0.5px solid ${theme.border}`, fontSize: 12 }}>
-                        <span style={{ color: theme.muted }}>{k}</span>
-                        <span style={{ color: theme.text, fontFamily: typeof v === 'string' && v.includes('.') ? 'monospace' : 'inherit', fontSize: 11 }}>{v}</span>
+                // Read-only view — two-column: primary pool | fallback pool, then system below
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                    {/* Primary pool */}
+                    <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '12px' }}>
+                      <div style={{ fontWeight: 500, fontSize: 11, color: theme.text, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#639922', display: 'inline-block' }} />
+                        Primary pool
                       </div>
-                    ))}
+                      {[
+                        ['URL', selected.pool?.stratumURL],
+                        ['Port', selected.pool?.stratumPort],
+                        ['Worker', selected.pool?.stratumUser],
+                        ['TLS', selected.pool?.stratumTLS ? 'Yes' : 'No'],
+                        ['Password', selected.pool?.stratumPassword ? '••••' : '—'],
+                      ].map(([k, v]) => v != null && (
+                        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `0.5px solid ${theme.border}`, fontSize: 12 }}>
+                          <span style={{ color: theme.muted }}>{k}</span>
+                          <span style={{ color: theme.text, fontFamily: k === 'URL' || k === 'Worker' ? 'monospace' : 'inherit', fontSize: 11, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Fallback pool */}
+                    <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '12px' }}>
+                      <div style={{ fontWeight: 500, fontSize: 11, color: theme.text, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: theme.faint, display: 'inline-block' }} />
+                        Fallback pool
+                      </div>
+                      {[
+                        ['URL', selected.pool?.fallbackStratumURL],
+                        ['Port', selected.pool?.fallbackStratumPort],
+                        ['Worker', selected.pool?.fallbackStratumUser],
+                        ['TLS', selected.pool?.fallbackStratumTLS ? 'Yes' : 'No'],
+                        ['Password', selected.pool?.fallbackStratumPassword ? '••••' : '—'],
+                      ].map(([k, v]) => v != null && (
+                        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `0.5px solid ${theme.border}`, fontSize: 12 }}>
+                          <span style={{ color: theme.muted }}>{k}</span>
+                          <span style={{ color: theme.text, fontFamily: k === 'URL' || k === 'Worker' ? 'monospace' : 'inherit', fontSize: 11, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div>
-                    <div style={{ fontWeight: 500, fontSize: 11, color: theme.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>System</div>
-                    {[
-                      ['Auto fan', selected.system?.autofanspeed ? 'Yes' : 'No'],
-                      ['Target temp', selected.system?.temptarget ? `${selected.system.temptarget}°C` : '—'],
-                      ['Overheat temp', selected.system?.overheat_temp ? `${selected.system.overheat_temp}°C` : '—'],
-                      ['Display timeout', selected.system?.displayTimeout != null ? `${selected.system.displayTimeout}m` : '—'],
-                      ['Stats frequency', selected.system?.statsFrequency ? `${selected.system.statsFrequency}s` : 'disabled'],
-                    ].map(([k, v]) => (
-                      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `0.5px solid ${theme.border}`, fontSize: 12 }}>
-                        <span style={{ color: theme.muted }}>{k}</span>
-                        <span style={{ color: theme.text }}>{v}</span>
-                      </div>
-                    ))}
+                  {/* System */}
+                  <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '12px' }}>
+                    <div style={{ fontWeight: 500, fontSize: 11, color: theme.text, marginBottom: 8 }}>System</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+                      {[
+                        ['Fan', selected.system?.autofanspeed ? 'Auto' : `Manual ${selected.system?.fanspeed ?? 100}%`],
+                        ['Target temp', selected.system?.temptarget ? `${selected.system.temptarget}°C` : '—'],
+                        ['Overheat temp', selected.system?.overheat_temp ? `${selected.system.overheat_temp}°C` : '—'],
+                        ['Display timeout', selected.system?.displayTimeout != null ? `${selected.system.displayTimeout}m` : '—'],
+                        ['Stats frequency', selected.system?.statsFrequency ? `${selected.system.statsFrequency}s` : 'disabled'],
+                      ].map(([k, v]) => (
+                        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 12, borderBottom: `0.5px solid ${theme.border}` }}>
+                          <span style={{ color: theme.muted }}>{k}</span>
+                          <span style={{ color: theme.text }}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
                     {selected.created_at && (
                       <div style={{ fontSize: 10, color: theme.faint, marginTop: 8 }}>
                         Created: {new Date(selected.created_at).toLocaleDateString()}
-                        {selected.source_mac && ` · From: ${selected.source_mac}`}
+                        {selected.source_mac && ` · Captured from: ${selected.source_mac}`}
                       </div>
                     )}
                   </div>

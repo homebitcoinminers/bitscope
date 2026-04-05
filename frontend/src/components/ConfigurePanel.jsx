@@ -311,8 +311,11 @@ export default function ConfigurePanel({ mac, device, latest, onClose }) {
               <Field label="Fallback worker">
                 <TInput value={pool.fallbackStratumUser} onChange={p('fallbackStratumUser')} placeholder="bc1q…xyz.worker" mono />
               </Field>
+              <Field label="Fallback password">
+                <TInput value={pool.fallbackStratumPassword} onChange={p('fallbackStratumPassword')} placeholder="x" />
+              </Field>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
                 <Toggle value={pool.restart} onChange={p('restart')} label="Restart device after applying" />
                 <Btn primary onClick={applyPool} disabled={saving}>{saving ? 'Applying…' : 'Apply pool config'}</Btn>
               </div>
