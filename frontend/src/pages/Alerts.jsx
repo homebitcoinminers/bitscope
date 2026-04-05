@@ -6,8 +6,8 @@ import { PageWrap, Topbar, Card, Badge, Btn, SectionTitle, EmptyState, useTheme,
 const TYPE_COLOR = {
   offline: 'gray', online: 'green', overheat: 'red', vr_overheat: 'red',
   asic_overheat: 'red', error_rate: 'amber', power_over_spec: 'amber',
-  hw_nonce: 'red', new_device: 'blue', fan_failure: 'red',
-  weak_wifi: 'amber', new_best_diff: 'purple',
+  hw_nonce: 'red', hw_nonce_rate: 'red', new_device: 'blue', fan_failure: 'red',
+  weak_wifi: 'amber', new_best_diff: 'purple', tuning_change: 'blue',
 }
 
 const ALERT_LABELS = {

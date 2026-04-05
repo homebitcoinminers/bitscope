@@ -696,6 +696,206 @@ async def _check_daily_digest():
             db.commit()
 
 
+
+# ── Device configuration (PATCH proxy to AxeOS) ──────────────────────────────
+
+async def _patch_device(ip: str, payload: dict) -> dict:
+    """Send a PATCH request to a device's AxeOS API."""
+    import aiohttp as _aio
+    try:
+        async with _aio.ClientSession() as http:
+            async with http.patch(
+                f"http://{ip}/api/system",
+                json=payload,
+                timeout=_aio.ClientTimeout(total=10),
+                headers={"Host": ip, "Content-Type": "application/json"},
+            ) as resp:
+                status = resp.status
+                try:
+                    body = await resp.json(content_type=None)
+                except Exception:
+                    body = {}
+                return {"ok": status in (200, 204), "status": status, "body": body}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+async def _restart_device(ip: str) -> dict:
+    """POST restart to a device."""
+    import aiohttp as _aio
+    try:
+        async with _aio.ClientSession() as http:
+            async with http.post(
+                f"http://{ip}/api/system/restart",
+                timeout=_aio.ClientTimeout(total=8),
+                headers={"Host": ip},
+            ) as resp:
+                return {"ok": resp.status in (200, 204)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.get("/api/devices/{mac}/asic-info")
+async def get_asic_info(mac: str, db: Session = Depends(get_session)):
+    """Fetch /api/system/asic from the device for frequency/voltage options."""
+    mac = mac.upper()
+    device = db.get(Device, mac)
+    if not device or not device.last_ip:
+        raise HTTPException(404, "Device not found or no IP")
+    async with aiohttp.ClientSession() as http:
+        try:
+            async with http.get(
+                f"http://{device.last_ip}/api/system/asic",
+                timeout=aiohttp.ClientTimeout(total=8),
+                headers={"Host": device.last_ip},
+            ) as resp:
+                if resp.status == 200:
+                    return await resp.json(content_type=None)
+                raise HTTPException(502, f"Device returned {resp.status}")
+        except Exception as e:
+            raise HTTPException(502, str(e))
+
+
+@app.post("/api/devices/{mac}/configure/pool")
+async def configure_pool(mac: str, body: dict, db: Session = Depends(get_session)):
+    """Push pool config to a single device."""
+    mac = mac.upper()
+    device = db.get(Device, mac)
+    if not device or not device.last_ip:
+        raise HTTPException(404, "Device not found or no IP")
+
+    payload = {}
+    for field in [
+        "stratumURL", "stratumPort", "stratumUser", "stratumPassword",
+        "stratumTLS", "stratumEnonceSubscribe",
+        "fallbackStratumURL", "fallbackStratumPort", "fallbackStratumUser",
+        "fallbackStratumPassword", "fallbackStratumTLS",
+    ]:
+        if field in body:
+            payload[field] = body[field]
+
+    result = await _patch_device(device.last_ip, payload)
+    if body.get("restart") and result["ok"]:
+        await asyncio.sleep(0.5)
+        await _restart_device(device.last_ip)
+    return result
+
+
+@app.post("/api/devices/{mac}/configure/system")
+async def configure_system(mac: str, body: dict, db: Session = Depends(get_session)):
+    """Push system/fan/display config to a single device."""
+    mac = mac.upper()
+    device = db.get(Device, mac)
+    if not device or not device.last_ip:
+        raise HTTPException(404, "Device not found or no IP")
+
+    payload = {}
+    for field in [
+        "hostname", "autofanspeed", "fanspeed", "temptarget", "minFanSpeed",
+        "displayTimeout", "rotation", "invertscreen", "autoscreenoff",
+        "statsFrequency", "overheat_temp",
+    ]:
+        if field in body:
+            payload[field] = body[field]
+
+    result = await _patch_device(device.last_ip, payload)
+    if body.get("restart") and result["ok"]:
+        await asyncio.sleep(0.5)
+        await _restart_device(device.last_ip)
+    return result
+
+
+@app.post("/api/devices/{mac}/configure/tuning")
+async def configure_tuning(mac: str, body: dict, db: Session = Depends(get_session)):
+    """Push frequency/voltage to a single device. Requires explicit confirmation flag."""
+    mac = mac.upper()
+    if not body.get("confirmed"):
+        raise HTTPException(400, "Must include confirmed=true to change frequency/voltage")
+    device = db.get(Device, mac)
+    if not device or not device.last_ip:
+        raise HTTPException(404, "Device not found or no IP")
+
+    # Always enable overclocking first, then set values
+    payload = {"overclockEnabled": 1}
+    if "frequency" in body:
+        payload["frequency"] = int(body["frequency"])
+    if "coreVoltage" in body:
+        payload["coreVoltage"] = int(body["coreVoltage"])
+
+    result = await _patch_device(device.last_ip, payload)
+
+    # Log tuning change for audit trail
+    if result["ok"]:
+        alert = AlertLog(
+            mac=mac,
+            alert_type="tuning_change",
+            message=f"Tuning updated: freq={body.get('frequency')}MHz, voltage={body.get('coreVoltage')}mV",
+            value=f"freq={body.get('frequency')}, volt={body.get('coreVoltage')}",
+        )
+        with Session(engine) as log_db:
+            log_db.add(alert)
+            log_db.commit()
+
+    if body.get("restart") and result["ok"]:
+        await asyncio.sleep(0.5)
+        await _restart_device(device.last_ip)
+    return result
+
+
+@app.post("/api/devices/{mac}/restart")
+async def restart_device_endpoint(mac: str, db: Session = Depends(get_session)):
+    """Restart a single device."""
+    mac = mac.upper()
+    device = db.get(Device, mac)
+    if not device or not device.last_ip:
+        raise HTTPException(404)
+    return await _restart_device(device.last_ip)
+
+
+@app.post("/api/fleet/configure/pool")
+async def fleet_configure_pool(body: dict, db: Session = Depends(get_session)):
+    """Push pool config to multiple devices simultaneously."""
+    macs = [m.upper() for m in body.get("macs", [])]
+    if not macs:
+        raise HTTPException(400, "macs list required")
+
+    pool_payload = {}
+    for field in [
+        "stratumURL", "stratumPort", "stratumUser", "stratumPassword",
+        "stratumTLS", "fallbackStratumURL", "fallbackStratumPort",
+        "fallbackStratumUser", "fallbackStratumPassword", "fallbackStratumTLS",
+    ]:
+        if field in body:
+            pool_payload[field] = body[field]
+
+    results = {}
+    tasks = []
+
+    async def push_one(mac: str, ip: str):
+        r = await _patch_device(ip, pool_payload)
+        if body.get("restart") and r["ok"]:
+            await asyncio.sleep(0.3)
+            await _restart_device(ip)
+        results[mac] = r
+
+    for mac in macs:
+        device = db.get(Device, mac)
+        if device and device.last_ip:
+            tasks.append(push_one(mac, device.last_ip))
+        else:
+            results[mac] = {"ok": False, "error": "No IP known"}
+
+    await asyncio.gather(*tasks)
+
+    success = sum(1 for r in results.values() if r.get("ok"))
+    return {
+        "total": len(macs),
+        "success": success,
+        "failed": len(macs) - success,
+        "results": results,
+    }
+
+
 # ── Settings ──────────────────────────────────────────────────────────────────
 
 @app.get("/api/settings")

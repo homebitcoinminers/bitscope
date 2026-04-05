@@ -28,6 +28,12 @@ export const api = {
   archiveDevice: (mac) => req('POST', `/devices/${mac}/archive`),
   unarchiveDevice: (mac) => req('POST', `/devices/${mac}/unarchive`),
   identifyDevice: (mac) => req('POST', `/devices/${mac}/identify`),
+  restartDevice: (mac) => req('POST', `/devices/${mac}/restart`),
+  getAsicInfo: (mac) => req('GET', `/devices/${mac}/asic-info`),
+  configurePool: (mac, body) => req('POST', `/devices/${mac}/configure/pool`, body),
+  configureSystem: (mac, body) => req('POST', `/devices/${mac}/configure/system`, body),
+  configureTuning: (mac, body) => req('POST', `/devices/${mac}/configure/tuning`, body),
+  fleetConfigurePool: (body) => req('POST', '/fleet/configure/pool', body),
 
   // Metrics
   metrics: (mac, params = {}) => {
