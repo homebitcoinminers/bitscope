@@ -9,7 +9,7 @@ import {
   healthColor,
 } from '../components/UI.jsx'
 import { HashrateChart, MetricChart, AsicTempBars } from '../components/Charts.jsx'
-import ConfigurePanel from '../components/ConfigurePanel.jsx'
+
 
 const PRESET_RANGES = ['1h', '6h', '24h', '7d', '2w', '1mo', 'all']
 
@@ -42,7 +42,6 @@ export default function DeviceDetail() {
   const [nonceStats, setNonceStats] = useState(null)
   const [nonceHistory, setNonceHistory] = useState([])
   const [nonceRange, setNonceRange] = useState(24)
-  const [showConfigure, setShowConfigure] = useState(false)
 
   const loadDevice = useCallback(async () => {
     const [d, all] = await Promise.all([api.device(mac), api.thresholds()])
@@ -196,7 +195,7 @@ export default function DeviceDetail() {
               background: 'none', border: `0.5px solid ${theme.border}`, borderRadius: 6,
               padding: '4px 8px', cursor: 'pointer', color: theme.muted, fontSize: 16, lineHeight: 1,
             }}>↻</button>
-            <Btn onClick={() => setShowConfigure(true)} small>⚙ Configure</Btn>
+            <Btn onClick={() => navigate(`/configure?mac=${mac}`)} small>⚙ Configure</Btn>
             {device.active_session_id
               ? <Btn onClick={endSession} small danger>End session</Btn>
               : <Btn onClick={startSession} small primary>Start test session</Btn>
@@ -205,14 +204,7 @@ export default function DeviceDetail() {
         )}
       </Topbar>
 
-      {showConfigure && (
-        <ConfigurePanel
-          mac={mac}
-          device={device}
-          latest={latest}
-          onClose={() => { setShowConfigure(false); loadDevice() }}
-        />
-      )}
+
 
       <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 300px', gap: 14, alignItems: 'start' }}>
 

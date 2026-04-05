@@ -8,6 +8,7 @@ import Scanner from './pages/Scanner.jsx'
 import Thresholds from './pages/Thresholds.jsx'
 import Logs from './pages/Logs.jsx'
 import Profiles from './pages/Profiles.jsx'
+import Configure from './pages/Configure.jsx'
 import { api } from './api.js'
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -45,6 +46,7 @@ const NAV = [
   { to: '/', label: 'Devices', icon: GridIcon, exact: true },
   { to: '/sessions', label: 'Sessions', icon: ChartIcon },
   { to: '/alerts', label: 'Alerts', icon: BellIcon },
+  { to: '/configure', label: 'Configure', icon: WrenchIcon },
   { to: '/scanner', label: 'Scanner', icon: RadarIcon },
   { to: '/profiles', label: 'Profiles', icon: ProfileIcon },
   { to: '/thresholds', label: 'Thresholds', icon: SliderIcon },
@@ -82,6 +84,7 @@ export default function App() {
               <Route path="/thresholds" element={<Thresholds />} />
               <Route path="/logs" element={<Logs />} />
               <Route path="/profiles" element={<Profiles />} />
+              <Route path="/configure" element={<Configure />} />
             </Routes>
           </main>
         </div>
@@ -287,6 +290,9 @@ function SliderIcon({ size = 14 }) {
 }
 function ShieldIcon({ size = 16, color = 'currentColor' }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill={color}><path d="M8 1L2 4v4c0 3.5 2.5 6.5 6 7.5 3.5-1 6-4 6-7.5V4L8 1z"/></svg>
+}
+function WrenchIcon({ size = 14 }) {
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M10.97 1.11a.75.75 0 0 1 .82.16l1 1a.75.75 0 0 1 .16.82l-.44 1.06a2.5 2.5 0 0 1-3.22 1.37L4.5 10.29a2.5 2.5 0 1 1-2.83-2.83l4.77-4.77a2.5 2.5 0 0 1 1.37-3.22l1.06-.44zM3.5 12a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/></svg>
 }
 function ProfileIcon({ size = 14 }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path d="M4 2h8a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1zm1 3h6M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { api } from '../api.js'
 import { Badge, Btn, StatCard, useTheme, formatHashrate, formatUptime, formatDiff, formatDate, healthColor } from '../components/UI.jsx'
-import FleetConfigPanel from '../components/FleetConfigPanel.jsx'
 
 // Every column available — key maps to getValue() and renderCell()
 const ALL_COLS = [
@@ -81,7 +80,6 @@ export default function Devices() {
   const [visibleCols, setVisibleCols]   = useState(loadCols)
   const [showColPicker, setShowColPicker] = useState(false)
   const [showExport, setShowExport]     = useState(false)
-  const [showFleetConfig, setShowFleetConfig] = useState(false)
   const [expandedStat, setExpandedStat] = useState(null)
   const [search, setSearch]             = useState('')
   const [showArchived, setShowArchived] = useState(false)
@@ -218,14 +216,12 @@ export default function Devices() {
           <Btn onClick={addDevice}>+ Add</Btn>
           <button onClick={refresh} disabled={refreshing} title="Refresh" style={{ background: 'none', border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '4px 8px', cursor: 'pointer', color: theme.muted, fontSize: 16, lineHeight: 1 }}>{refreshing ? '⌛' : '↻'}</button>
           <Btn onClick={() => setShowExport(v => !v)}>Export…</Btn>
-          <Btn onClick={() => setShowFleetConfig(true)}>Fleet config</Btn>
+          <Btn onClick={() => navigate('/configure')}>Fleet config</Btn>
           <Btn primary onClick={scan} disabled={scanning}>{scanning ? 'Scanning…' : 'Scan now'}</Btn>
         </div>
       </div>
 
-      {showFleetConfig && (
-        <FleetConfigPanel devices={devices} onClose={() => { setShowFleetConfig(false); load() }} />
-      )}
+
 
       {addError && <div style={{ background: '#fff3f3', color: '#c00', padding: '8px 20px', fontSize: 12 }}>{addError}</div>}
 

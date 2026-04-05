@@ -1,284 +1,308 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api.js'
-import { PageWrap, Topbar, Card, Btn, SectionTitle, EmptyState, useTheme, Badge } from '../components/UI.jsx'
+import { PageWrap, Topbar, Card, Btn, useTheme, Badge } from '../components/UI.jsx'
+
+const TYPE_LABELS = {
+  pool:     { label: 'Pool',     color: '#185fa5', desc: 'Pool, fallback pool, worker, TLS' },
+  system:   { label: 'System',   color: '#1d9e75', desc: 'Hostname, WiFi, display, stats' },
+  hardware: { label: 'Hardware', color: '#9333ea', desc: 'Fan, temps, freq, voltage — model-locked' },
+}
 
 export default function Profiles() {
-  const [profiles, setProfiles] = useState([])
-  const [selected, setSelected] = useState(null)
-  const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState({})
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState(null)
+  const [profiles, setProfiles]   = useState([])
+  const [typeFilter, setTypeFilter] = useState('pool')
+  const [selected, setSelected]   = useState(null)
+  const [editing, setEditing]     = useState(false)
+  const [form, setForm]           = useState({})
+  const [saving, setSaving]       = useState(false)
+  const [msg, setMsg]             = useState(null)
   const theme = useTheme()
 
-  const load = () => api.profiles().then(setProfiles)
+  const load = () => api.profiles().then(p => setProfiles(p))
   useEffect(() => { load() }, [])
 
-  const select = (p) => {
-    setSelected(p)
-    setForm(JSON.parse(JSON.stringify(p))) // deep copy
-    setEditing(false)
-    setMsg(null)
-  }
+  const filtered = profiles.filter(p => p.type === typeFilter)
+
+  const select = (p) => { setSelected(p); setForm(JSON.parse(JSON.stringify(p))); setEditing(false); setMsg(null) }
 
   const save = async () => {
     setSaving(true)
-    await api.saveProfile(form._id, form)
+    await api.saveProfile(form.type, form._id, form)
     await load()
     setMsg({ ok: true, text: 'Profile saved' })
-    setSaving(false)
-    setEditing(false)
+    setSaving(false); setEditing(false)
   }
 
   const del = async (p) => {
-    if (!confirm(`Delete profile "${p.name}"?`)) return
-    await api.deleteProfile(p._id)
-    setSelected(null)
-    load()
+    if (!confirm(`Delete "${p.name}"?`)) return
+    await api.deleteProfile(p.type, p._id)
+    setSelected(null); load()
   }
 
   const newProfile = () => {
-    const blank = {
-      _id: `profile_${Date.now()}`,
-      name: 'New profile',
-      description: '',
-      pool: {
+    const defaults = {
+      pool: { _id: `pool_${Date.now()}`, type: 'pool', name: 'New pool profile',
         stratumURL: 'pool.homebitcoinminers.au', stratumPort: 4333,
         stratumUser: 'bc1qd2gz9h8zwh2stga6lrfh95p8c5w3qc96w2g57c.hbm',
         stratumPassword: 'x', stratumTLS: true,
         fallbackStratumURL: 'ausolo.ckpool.org', fallbackStratumPort: 3333,
         fallbackStratumUser: 'bc1qd2gz9h8zwh2stga6lrfh95p8c5w3qc96w2g57c.hbm',
-        fallbackStratumPassword: 'x', fallbackStratumTLS: false,
-      },
-      system: { autofanspeed: false, fanspeed: 100, temptarget: 60, displayTimeout: -1, statsFrequency: 120, overheat_temp: 70 },
+        fallbackStratumPassword: 'x', fallbackStratumTLS: false },
+      system: { _id: `sys_${Date.now()}`, type: 'system', name: 'New system profile',
+        hostname_template: '{devicename}_{last4mac}', wifi_ssid: '', wifi_password: '',
+        displayTimeout: -1, rotation: 0, invertscreen: 0, statsFrequency: 120 },
+      hardware: { _id: `hw_${Date.now()}`, type: 'hardware', name: 'New hardware profile',
+        model_lock: '', autofanspeed: false, fanspeed: 100, temptarget: 60,
+        overheat_temp: 70, frequency: null, coreVoltage: null, use_factory_defaults: false },
     }
-    setSelected(blank)
-    setForm(blank)
-    setEditing(true)
+    const blank = defaults[typeFilter]
+    setSelected(blank); setForm(blank); setEditing(true)
   }
 
   const inp = { border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '5px 10px', fontSize: 12, background: theme.inputBg, color: theme.text, outline: 'none', width: '100%' }
-  const sp = (section, key) => val => setForm(f => ({ ...f, [section]: { ...f[section], [key]: val } }))
+  const sp = (key) => val => setForm(f => ({ ...f, [key]: val }))
+
+  const Tog = ({ k }) => {
+    const v = form[k]
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', paddingTop: 4 }} onClick={() => sp(k)(!v)}>
+        <div style={{ position: 'relative', width: 36, height: 20, flexShrink: 0, borderRadius: 10, background: v ? '#22c55e' : theme.border, transition: 'background 0.2s' }}>
+          <div style={{ position: 'absolute', top: 2, left: v ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+        </div>
+        <span style={{ fontSize: 12, color: theme.text, userSelect: 'none' }}>{v ? 'Yes' : 'No'}</span>
+      </div>
+    )
+  }
+
+  const F = ({ label, children }) => (
+    <div>
+      <div style={{ fontSize: 11, color: theme.muted, marginBottom: 3 }}>{label}</div>
+      {children}
+    </div>
+  )
+
+  const PoolSection = ({ prefix, label, dot }) => (
+    <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: 14, marginBottom: 12, background: theme.statBg }}>
+      <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, display: 'inline-block' }} />{label}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <F label="URL"><input value={form[`${prefix}URL`] || ''} onChange={e => sp(`${prefix}URL`)(e.target.value)} style={inp} /></F>
+        <F label="Port"><input type="number" value={form[`${prefix}Port`] || ''} onChange={e => sp(`${prefix}Port`)(Number(e.target.value))} style={inp} /></F>
+        <F label="Worker"><input value={form[`${prefix}User`] || ''} onChange={e => sp(`${prefix}User`)(e.target.value)} style={{ ...inp, fontFamily: 'monospace', fontSize: 11 }} /></F>
+        <F label="Password"><input value={form[`${prefix}Password`] || ''} onChange={e => sp(`${prefix}Password`)(e.target.value)} style={inp} placeholder="x" /></F>
+        <F label="TLS"><Tog k={`${prefix}TLS`} /></F>
+      </div>
+    </div>
+  )
 
   return (
     <PageWrap>
       <Topbar title="Profiles">
-        <span style={{ fontSize: 12, color: theme.muted }}>Saved as JSON in /data/profiles/</span>
-        <Btn primary onClick={newProfile}>+ New profile</Btn>
+        <span style={{ fontSize: 11, color: theme.muted }}>Saved in /data/profiles/</span>
+        <Btn primary onClick={newProfile}>+ New {typeFilter} profile</Btn>
       </Topbar>
 
-      <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '220px 1fr', gap: 14, height: 'calc(100% - 50px)', overflow: 'hidden' }}>
+      <div style={{ padding: 14, display: 'grid', gridTemplateColumns: '200px 1fr', gap: 12, height: 'calc(100vh - 50px)', overflow: 'hidden' }}>
 
-        {/* Profile list */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' }}>
-          {profiles.length === 0 ? (
-            <div style={{ fontSize: 12, color: theme.muted, padding: '1rem' }}>No profiles yet</div>
-          ) : profiles.map(p => (
-            <div key={p._id} onClick={() => select(p)} style={{
-              padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
-              border: `0.5px solid ${selected?._id === p._id ? theme.accent : theme.border}`,
-              background: selected?._id === p._id ? `${theme.accent}15` : theme.cardBg,
-            }}>
-              <div style={{ fontWeight: 500, fontSize: 13, color: theme.text }}>{p.name}</div>
-              {p.description && <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{p.description}</div>}
-              {p.is_default && <Badge color="blue" style={{ marginTop: 4 }}>default</Badge>}
-              {p.source_model && <div style={{ fontSize: 10, color: theme.faint, marginTop: 2 }}>From: {p.source_model}</div>}
-            </div>
-          ))}
+        {/* Left — type tabs + profile list */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden' }}>
+          {/* Type selector */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 8 }}>
+            {Object.entries(TYPE_LABELS).map(([type, info]) => (
+              <button key={type} onClick={() => { setTypeFilter(type); setSelected(null) }} style={{
+                padding: '8px 10px', borderRadius: 7, border: `0.5px solid ${typeFilter === type ? info.color : theme.border}`,
+                background: typeFilter === type ? `${info.color}18` : theme.cardBg,
+                color: typeFilter === type ? info.color : theme.muted,
+                cursor: 'pointer', textAlign: 'left', fontWeight: typeFilter === type ? 500 : 400, fontSize: 12,
+              }}>
+                <div>{info.label}</div>
+                <div style={{ fontSize: 10, color: theme.faint, marginTop: 1 }}>{info.desc}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Profile list for current type */}
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {filtered.length === 0 ? (
+              <div style={{ fontSize: 12, color: theme.faint, padding: '8px 4px' }}>No {typeFilter} profiles</div>
+            ) : filtered.map(p => (
+              <div key={p._id} onClick={() => select(p)} style={{
+                padding: '9px 10px', borderRadius: 7, cursor: 'pointer', marginBottom: 4,
+                border: `0.5px solid ${selected?._id === p._id ? theme.accent : theme.border}`,
+                background: selected?._id === p._id ? `${theme.accent}14` : theme.cardBg,
+              }}>
+                <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                {p.model_lock && <div style={{ fontSize: 10, color: '#854f0b', marginTop: 2 }}>🔒 {p.model_lock}</div>}
+                {p.is_default && <div style={{ fontSize: 10, color: theme.faint, marginTop: 2 }}>built-in default</div>}
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Profile editor */}
+        {/* Right — editor */}
         {selected ? (
-          <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ overflowY: 'auto' }}>
             {msg && (
-              <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: 12, background: msg.ok ? '#eaf3de' : '#fcebeb', color: msg.ok ? '#3b6d11' : '#a32d2d' }}>
-                {msg.text}
-              </div>
+              <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: 12, marginBottom: 10, background: msg.ok ? '#eaf3de' : '#fcebeb', color: msg.ok ? '#3b6d11' : '#a32d2d' }}>{msg.text}</div>
             )}
 
             <Card>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ fontWeight: 500, fontSize: 13, color: theme.text }}>
-                  {editing ? 'Edit profile' : selected.name}
-                </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <div style={{ fontWeight: 500, fontSize: 14, color: theme.text }}>{editing ? 'Edit profile' : selected.name}</div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  {editing ? (
-                    <>
-                      <Btn primary small onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Btn>
-                      <Btn small onClick={() => { setEditing(false); setForm(JSON.parse(JSON.stringify(selected))) }}>Cancel</Btn>
-                    </>
-                  ) : (
-                    <>
-                      <Btn small onClick={() => setEditing(true)}>Edit</Btn>
-                      {!selected.is_default && <Btn small danger onClick={() => del(selected)}>Delete</Btn>}
-                    </>
-                  )}
+                  {editing
+                    ? <><Btn primary small onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Btn><Btn small onClick={() => { setEditing(false); setForm(JSON.parse(JSON.stringify(selected))) }}>Cancel</Btn></>
+                    : <><Btn small onClick={() => setEditing(true)}>Edit</Btn>{!selected.is_default && <Btn small danger onClick={() => del(selected)}>Delete</Btn>}</>
+                  }
                 </div>
               </div>
 
               {editing ? (
                 <div>
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 11, color: theme.muted, marginBottom: 3 }}>Profile name</div>
-                    <input value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={inp} />
-                  </div>
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, color: theme.muted, marginBottom: 3 }}>Description</div>
-                    <input value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={inp} placeholder="Optional description" />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                    <F label="Profile name"><input value={form.name || ''} onChange={e => sp('name')(e.target.value)} style={inp} /></F>
+                    <F label="Description"><input value={form.description || ''} onChange={e => sp('description')(e.target.value)} style={inp} placeholder="Optional" /></F>
                   </div>
 
-                  {/* Primary pool card */}
-                  <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '14px', marginBottom: 12, background: theme.statBg }}>
-                    <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#639922', display: 'inline-block' }} />
-                      Primary pool
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <F label="Pool URL"><input value={form.pool?.stratumURL || ''} onChange={e => sp('pool','stratumURL')(e.target.value)} style={inp} placeholder="pool.example.com" /></F>
-                      <F label="Port"><input type="number" value={form.pool?.stratumPort || ''} onChange={e => sp('pool','stratumPort')(Number(e.target.value))} style={inp} /></F>
-                      <F label="Worker"><input value={form.pool?.stratumUser || ''} onChange={e => sp('pool','stratumUser')(e.target.value)} style={{ ...inp, fontFamily: 'monospace', fontSize: 11 }} /></F>
-                      <F label="Password"><input value={form.pool?.stratumPassword || ''} onChange={e => sp('pool','stratumPassword')(e.target.value)} style={inp} placeholder="x" /></F>
-                      <F label="TLS"><Tog value={form.pool?.stratumTLS} onChange={sp('pool','stratumTLS')} /></F>
-                    </div>
-                  </div>
+                  {/* Pool editor */}
+                  {form.type === 'pool' && <>
+                    <PoolSection prefix="stratum" label="Primary pool" dot="#639922" />
+                    <PoolSection prefix="fallbackStratum" label="Fallback pool" dot={theme.faint} />
+                  </>}
 
-                  {/* Fallback pool card */}
-                  <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '14px', marginBottom: 14, background: theme.statBg }}>
-                    <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: theme.faint, display: 'inline-block' }} />
-                      Fallback pool
+                  {/* System editor */}
+                  {form.type === 'system' && (
+                    <div>
+                      <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>Hostname</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10, marginBottom: 14 }}>
+                        <F label="Hostname template" ><input value={form.hostname_template || ''} onChange={e => sp('hostname_template')(e.target.value)} style={{ ...inp, fontFamily: 'monospace' }} placeholder="{devicename}_{last4mac}" /></F>
+                        <div style={{ fontSize: 11, color: theme.muted }}>Tokens: <code style={{ background: theme.statBg, padding: '1px 4px', borderRadius: 3 }}>{'{devicename}'}</code> <code style={{ background: theme.statBg, padding: '1px 4px', borderRadius: 3 }}>{'{model}'}</code> <code style={{ background: theme.statBg, padding: '1px 4px', borderRadius: 3 }}>{'{last4mac}'}</code> <code style={{ background: theme.statBg, padding: '1px 4px', borderRadius: 3 }}>{'{mac}'}</code></div>
+                      </div>
+                      <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>WiFi (leave blank to skip)</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                        <F label="SSID"><input value={form.wifi_ssid || ''} onChange={e => sp('wifi_ssid')(e.target.value)} style={inp} /></F>
+                        <F label="Password"><input value={form.wifi_password || ''} onChange={e => sp('wifi_password')(e.target.value)} style={inp} /></F>
+                      </div>
+                      <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>Display & logging</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <F label="Display timeout (min)"><input type="number" value={form.displayTimeout ?? -1} onChange={e => sp('displayTimeout')(Number(e.target.value))} style={inp} /></F>
+                        <F label="Stats frequency (s)"><input type="number" value={form.statsFrequency || 0} onChange={e => sp('statsFrequency')(Number(e.target.value))} style={inp} /></F>
+                      </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <F label="Pool URL"><input value={form.pool?.fallbackStratumURL || ''} onChange={e => sp('pool','fallbackStratumURL')(e.target.value)} style={inp} placeholder="ausolo.ckpool.org" /></F>
-                      <F label="Port"><input type="number" value={form.pool?.fallbackStratumPort || ''} onChange={e => sp('pool','fallbackStratumPort')(Number(e.target.value))} style={inp} /></F>
-                      <F label="Worker"><input value={form.pool?.fallbackStratumUser || ''} onChange={e => sp('pool','fallbackStratumUser')(e.target.value)} style={{ ...inp, fontFamily: 'monospace', fontSize: 11 }} /></F>
-                      <F label="Password"><input value={form.pool?.fallbackStratumPassword || ''} onChange={e => sp('pool','fallbackStratumPassword')(e.target.value)} style={inp} placeholder="x" /></F>
-                      <F label="TLS"><Tog value={form.pool?.fallbackStratumTLS} onChange={sp('pool','fallbackStratumTLS')} /></F>
-                    </div>
-                  </div>
+                  )}
 
-                  {/* System card */}
-                  <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '14px', background: theme.statBg }}>
-                    <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 12 }}>System settings</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <F label="Target temp (°C)"><input type="number" value={form.system?.temptarget || ''} onChange={e => sp('system','temptarget')(Number(e.target.value))} style={inp} /></F>
-                      <F label="Overheat temp (°C)"><input type="number" value={form.system?.overheat_temp || ''} onChange={e => sp('system','overheat_temp')(Number(e.target.value))} style={inp} /></F>
-                      <F label="Display timeout (min)"><input type="number" value={form.system?.displayTimeout ?? -1} onChange={e => sp('system','displayTimeout')(Number(e.target.value))} style={inp} /></F>
-                      <F label="Stats frequency (s)"><input type="number" value={form.system?.statsFrequency || 0} onChange={e => sp('system','statsFrequency')(Number(e.target.value))} style={inp} /></F>
-                      <F label="Auto fan speed"><Tog value={form.system?.autofanspeed} onChange={sp('system','autofanspeed')} /></F>
-                      {!form.system?.autofanspeed && (
-                        <F label="Manual fan speed (%)"><input type="number" value={form.system?.fanspeed ?? 100} min={0} max={100} onChange={e => sp('system','fanspeed')(Number(e.target.value))} style={inp} /></F>
-                      )}
+                  {/* Hardware editor */}
+                  {form.type === 'hardware' && (
+                    <div>
+                      <div style={{ marginBottom: 14, padding: '10px 14px', background: '#faeeda', borderRadius: 6, fontSize: 12, color: '#854f0b' }}>
+                        ⚡ Hardware profiles are model-locked. They can only be applied to devices of the matching model.
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                        <F label="Model lock (required)">
+                          <input value={form.model_lock || ''} onChange={e => sp('model_lock')(e.target.value)} style={inp} placeholder="NerdQAxe++" />
+                        </F>
+                        <F label="Factory defaults only">
+                          <Tog k="use_factory_defaults" />
+                        </F>
+                      </div>
+                      <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>Fan & thermal</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                        <F label="Auto fan speed"><Tog k="autofanspeed" /></F>
+                        {form.autofanspeed
+                          ? <F label="Target temp (°C)"><input type="number" value={form.temptarget || ''} onChange={e => sp('temptarget')(Number(e.target.value))} style={inp} /></F>
+                          : <F label="Manual fan speed (%)"><input type="number" value={form.fanspeed ?? 100} onChange={e => sp('fanspeed')(Number(e.target.value))} style={inp} /></F>
+                        }
+                        <F label="Overheat temp (°C)"><input type="number" value={form.overheat_temp || ''} onChange={e => sp('overheat_temp')(Number(e.target.value))} style={inp} /></F>
+                      </div>
+                      {!form.use_factory_defaults && <>
+                        <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>ASIC tuning</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                          <F label="Frequency (MHz)"><input type="number" value={form.frequency ?? ''} onChange={e => sp('frequency')(e.target.value ? Number(e.target.value) : null)} style={inp} placeholder="e.g. 735" /></F>
+                          <F label="Core voltage (mV)"><input type="number" value={form.coreVoltage ?? ''} onChange={e => sp('coreVoltage')(e.target.value ? Number(e.target.value) : null)} style={inp} placeholder="e.g. 1150" /></F>
+                        </div>
+                      </>}
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
-                // Read-only view — two-column: primary pool | fallback pool, then system below
-                <div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                    {/* Primary pool */}
-                    <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '12px' }}>
-                      <div style={{ fontWeight: 500, fontSize: 11, color: theme.text, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#639922', display: 'inline-block' }} />
-                        Primary pool
-                      </div>
-                      {[
-                        ['URL', selected.pool?.stratumURL],
-                        ['Port', selected.pool?.stratumPort],
-                        ['Worker', selected.pool?.stratumUser],
-                        ['TLS', selected.pool?.stratumTLS ? 'Yes' : 'No'],
-                        ['Password', selected.pool?.stratumPassword ? '••••' : '—'],
-                      ].map(([k, v]) => v != null && (
-                        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `0.5px solid ${theme.border}`, fontSize: 12 }}>
-                          <span style={{ color: theme.muted }}>{k}</span>
-                          <span style={{ color: theme.text, fontFamily: k === 'URL' || k === 'Worker' ? 'monospace' : 'inherit', fontSize: 11, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Fallback pool */}
-                    <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '12px' }}>
-                      <div style={{ fontWeight: 500, fontSize: 11, color: theme.text, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: theme.faint, display: 'inline-block' }} />
-                        Fallback pool
-                      </div>
-                      {[
-                        ['URL', selected.pool?.fallbackStratumURL],
-                        ['Port', selected.pool?.fallbackStratumPort],
-                        ['Worker', selected.pool?.fallbackStratumUser],
-                        ['TLS', selected.pool?.fallbackStratumTLS ? 'Yes' : 'No'],
-                        ['Password', selected.pool?.fallbackStratumPassword ? '••••' : '—'],
-                      ].map(([k, v]) => v != null && (
-                        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `0.5px solid ${theme.border}`, fontSize: 12 }}>
-                          <span style={{ color: theme.muted }}>{k}</span>
-                          <span style={{ color: theme.text, fontFamily: k === 'URL' || k === 'Worker' ? 'monospace' : 'inherit', fontSize: 11, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  {/* System */}
-                  <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '12px' }}>
-                    <div style={{ fontWeight: 500, fontSize: 11, color: theme.text, marginBottom: 8 }}>System</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
-                      {[
-                        ['Fan', selected.system?.autofanspeed ? 'Auto' : `Manual ${selected.system?.fanspeed ?? 100}%`],
-                        ['Target temp', selected.system?.temptarget ? `${selected.system.temptarget}°C` : '—'],
-                        ['Overheat temp', selected.system?.overheat_temp ? `${selected.system.overheat_temp}°C` : '—'],
-                        ['Display timeout', selected.system?.displayTimeout != null ? `${selected.system.displayTimeout}m` : '—'],
-                        ['Stats frequency', selected.system?.statsFrequency ? `${selected.system.statsFrequency}s` : 'disabled'],
-                      ].map(([k, v]) => (
-                        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 12, borderBottom: `0.5px solid ${theme.border}` }}>
-                          <span style={{ color: theme.muted }}>{k}</span>
-                          <span style={{ color: theme.text }}>{v}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {selected.created_at && (
-                      <div style={{ fontSize: 10, color: theme.faint, marginTop: 8 }}>
-                        Created: {new Date(selected.created_at).toLocaleDateString()}
-                        {selected.source_mac && ` · Captured from: ${selected.source_mac}`}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                // Read-only view
+                <ReadOnly profile={selected} theme={theme} />
               )}
             </Card>
 
-            {!editing && (
-              <Card style={{ background: theme.statBg, border: 'none' }}>
-                <div style={{ fontSize: 12, color: theme.muted }}>
-                  Profiles are stored as JSON files in <code style={{ background: theme.cardBg, padding: '1px 4px', borderRadius: 3 }}>/data/profiles/</code> on the server.
-                  You can edit them directly or back them up by copying that folder.
-                  Apply profiles from the Configure panel on any device page.
-                </div>
-              </Card>
-            )}
+            <Card style={{ marginTop: 10, background: theme.statBg, border: 'none' }}>
+              <div style={{ fontSize: 12, color: theme.muted }}>
+                Profiles are stored as JSON in <code style={{ background: theme.cardBg, padding: '1px 4px', borderRadius: 3 }}>/data/profiles/{selected.type}/</code>.
+                Apply them from the <strong>Configure</strong> page using the saved profiles sidebar.
+              </div>
+            </Card>
           </div>
         ) : (
-          <EmptyState icon="📋" title="Select a profile" sub="Or create a new one to save pool and system settings" />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: theme.faint, flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 32 }}>📋</div>
+            <div style={{ fontWeight: 500, color: theme.text }}>Select a profile</div>
+            <div style={{ fontSize: 12 }}>Or create a new one</div>
+          </div>
         )}
       </div>
     </PageWrap>
   )
 }
 
-function F({ label, children }) {
-  const theme = useTheme()
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: theme.muted, marginBottom: 3 }}>{label}</div>
-      {children}
+function ReadOnly({ profile: p, theme }) {
+  const Row = ({ label, value, mono }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: `0.5px solid ${theme.border}`, fontSize: 12 }}>
+      <span style={{ color: theme.muted, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: theme.text, fontFamily: mono ? 'monospace' : 'inherit', fontSize: mono ? 11 : 12, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value ?? '—'}</span>
     </div>
   )
-}
-
-function Tog({ value, onChange }) {
-  const theme = useTheme()
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', paddingTop: 4 }} onClick={() => onChange(!value)}>
-      <div style={{ position: 'relative', width: 36, height: 20, flexShrink: 0, borderRadius: 10, background: value ? '#22c55e' : theme.border, transition: 'background 0.2s' }}>
-        <div style={{ position: 'absolute', top: 2, left: value ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+  const PoolCard = ({ label, dot, prefix }) => (
+    <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: 12 }}>
+      <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, display: 'inline-block' }} />{label}
       </div>
-      <span style={{ fontSize: 12, color: theme.text, userSelect: 'none' }}>{value ? 'Yes' : 'No'}</span>
+      <Row label="URL"    value={p[`${prefix}URL`]} mono />
+      <Row label="Port"   value={p[`${prefix}Port`]} />
+      <Row label="Worker" value={p[`${prefix}User`]} mono />
+      <Row label="TLS"    value={p[`${prefix}TLS`] ? 'Yes' : 'No'} />
+      <Row label="Password" value={p[`${prefix}Password`] ? '••••' : '—'} />
+    </div>
+  )
+
+  return (
+    <div>
+      {p.description && <div style={{ fontSize: 12, color: theme.muted, marginBottom: 14 }}>{p.description}</div>}
+
+      {p.type === 'pool' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <PoolCard label="Primary pool" dot="#639922" prefix="stratum" />
+          <PoolCard label="Fallback pool" dot={theme.faint} prefix="fallbackStratum" />
+        </div>
+      )}
+
+      {p.type === 'system' && (
+        <div>
+          <Row label="Hostname template" value={p.hostname_template} mono />
+          <Row label="WiFi SSID" value={p.wifi_ssid || '(not set)'} />
+          <Row label="Display timeout" value={p.displayTimeout != null ? `${p.displayTimeout}m` : '—'} />
+          <Row label="Stats frequency" value={p.statsFrequency ? `${p.statsFrequency}s` : 'disabled'} />
+        </div>
+      )}
+
+      {p.type === 'hardware' && (
+        <div>
+          <Row label="Model lock" value={p.model_lock || 'None'} />
+          <Row label="Fan" value={p.autofanspeed ? `Auto (target ${p.temptarget}°C)` : `Manual ${p.fanspeed ?? 100}%`} />
+          <Row label="Overheat temp" value={p.overheat_temp ? `${p.overheat_temp}°C` : '—'} />
+          <Row label="Factory defaults" value={p.use_factory_defaults ? 'Yes' : 'No'} />
+          {!p.use_factory_defaults && <>
+            <Row label="Frequency" value={p.frequency ? `${p.frequency} MHz` : '(not set)'} />
+            <Row label="Core voltage" value={p.coreVoltage ? `${p.coreVoltage} mV` : '(not set)'} />
+          </>}
+          {p.created_at && <div style={{ fontSize: 10, color: theme.faint, marginTop: 8 }}>Created: {new Date(p.created_at).toLocaleDateString()}{p.source_model ? ` · From: ${p.source_model}` : ''}</div>}
+        </div>
+      )}
     </div>
   )
 }

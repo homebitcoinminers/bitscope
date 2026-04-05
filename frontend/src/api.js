@@ -30,10 +30,7 @@ export const api = {
   identifyDevice: (mac) => req('POST', `/devices/${mac}/identify`),
   restartDevice: (mac) => req('POST', `/devices/${mac}/restart`),
   getAsicInfo: (mac) => req('GET', `/devices/${mac}/asic-info`),
-  configurePool: (mac, body) => req('POST', `/devices/${mac}/configure/pool`, body),
-  configureSystem: (mac, body) => req('POST', `/devices/${mac}/configure/system`, body),
   configureTuning: (mac, body) => req('POST', `/devices/${mac}/configure/tuning`, body),
-  fleetConfigurePool: (body) => req('POST', '/fleet/configure/pool', body),
 
   // Metrics
   metrics: (mac, params = {}) => {
@@ -63,12 +60,22 @@ export const api = {
   deleteSubnet: (id) => req('DELETE', `/scanner/subnets/${id}`),
   triggerScan: () => req('POST', '/scanner/scan'),
 
-  // Profiles
-  profiles: () => req('GET', '/profiles'),
-  getProfile: (id) => req('GET', `/profiles/${id}`),
-  saveProfile: (id, body) => req('POST', `/profiles/${id}`, body),
-  deleteProfile: (id) => req('DELETE', `/profiles/${id}`),
+  // Profiles (typed: pool | system | hardware)
+  profiles: (type) => req('GET', type ? `/profiles?type=${type}` : '/profiles'),
+  getProfile: (type, id) => req('GET', `/profiles/${type}/${id}`),
+  saveProfile: (type, id, body) => req('POST', `/profiles/${type}/${id}`, body),
+  deleteProfile: (type, id) => req('DELETE', `/profiles/${type}/${id}`),
   captureProfile: (mac, body) => req('POST', `/devices/${mac}/profiles/capture`, body),
+  previewHostname: (mac, template) => req('GET', `/devices/${mac}/profiles/preview-hostname?template=${encodeURIComponent(template)}`),
+
+  // Configure (fleet-capable)
+  configurePool: (body) => req('POST', '/configure/pool', body),
+  configureSystem: (body) => req('POST', '/configure/system', body),
+  configureHardware: (body) => req('POST', '/configure/hardware', body),
+  configureHistory: (limit = 100) => req('GET', `/configure/history?limit=${limit}`),
+
+  // Legacy per-device endpoints (kept for identify/restart)
+  configureTuning: (mac, body) => req('POST', `/devices/${mac}/configure/tuning`, body),
 
   // Logs
   logs: (limit = 200, level = 'ALL') => req('GET', `/logs?limit=${limit}&level=${level}`),

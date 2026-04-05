@@ -934,31 +934,38 @@ def get_logs(limit: int = 200, level: str = "ALL"):
 
 # ── Profiles ─────────────────────────────────────────────────────────────────
 
+import re as _re
+
+def _clean_id(s: str) -> str:
+    return _re.sub(r'[^a-zA-Z0-9_-]', '_', s.lower().replace(' ', '_'))[:48]
+
+
 @app.get("/api/profiles")
-def list_profiles():
-    return profile_store.list_profiles()
+def list_profiles(type: str | None = None):
+    return profile_store.list_profiles(type)
 
 
-@app.get("/api/profiles/{profile_id}")
-def get_profile(profile_id: str):
-    p = profile_store.get_profile(profile_id)
+@app.get("/api/profiles/{profile_type}/{profile_id}")
+def get_profile(profile_type: str, profile_id: str):
+    p = profile_store.get_profile(profile_type, profile_id)
     if not p:
         raise HTTPException(404, "Profile not found")
     return p
 
 
-@app.post("/api/profiles/{profile_id}")
-def save_profile(profile_id: str, body: dict):
-    import re as _re
-    clean_id = _re.sub(r'[^a-zA-Z0-9_-]', '_', profile_id)
-    return profile_store.save_profile(clean_id, body)
+@app.post("/api/profiles/{profile_type}/{profile_id}")
+def save_profile_endpoint(profile_type: str, profile_id: str, body: dict):
+    if profile_type not in ("pool", "system", "hardware"):
+        raise HTTPException(400, "Invalid profile type")
+    clean_id = _clean_id(profile_id)
+    return profile_store.save_profile(profile_type, clean_id, body)
 
 
-@app.delete("/api/profiles/{profile_id}")
-def delete_profile(profile_id: str):
-    if profile_id == "hbm_default":
-        raise HTTPException(400, "Cannot delete the default profile")
-    ok = profile_store.delete_profile(profile_id)
+@app.delete("/api/profiles/{profile_type}/{profile_id}")
+def delete_profile_endpoint(profile_type: str, profile_id: str):
+    if profile_id in ("hbm_default", "hbm_system_default", "nerdqaxe_default"):
+        raise HTTPException(400, "Cannot delete built-in default profiles")
+    ok = profile_store.delete_profile(profile_type, profile_id)
     if not ok:
         raise HTTPException(404)
     return {"ok": True}
@@ -966,9 +973,11 @@ def delete_profile(profile_id: str):
 
 @app.post("/api/devices/{mac}/profiles/capture")
 async def capture_profile_from_device(mac: str, body: dict, db: Session = Depends(get_session)):
-    """Capture current device settings as a new profile."""
-    import re as _re
+    """Capture current device settings as a typed profile."""
     mac = mac.upper()
+    profile_type = body.get("type", "pool")
+    if profile_type not in ("pool", "system", "hardware"):
+        raise HTTPException(400, "Invalid profile type")
     device = db.get(Device, mac)
     if not device or not device.last_ip:
         raise HTTPException(404, "Device not found or no IP")
@@ -985,10 +994,195 @@ async def capture_profile_from_device(mac: str, body: dict, db: Session = Depend
         except Exception as e:
             raise HTTPException(502, str(e))
 
-    name = body.get("name") or f"{device.label or device.hostname or mac} settings"
-    profile_id = _re.sub(r'[^a-zA-Z0-9_-]', '_', name.lower().replace(' ', '_'))
-    p = profile_store.profile_from_device_snapshot(raw, name)
-    return profile_store.save_profile(profile_id, p)
+    name = body.get("name") or f"{device.label or device.hostname or mac} {profile_type}"
+    profile_id = _clean_id(name)
+    p = profile_store.capture_from_snapshot(raw, profile_type, name)
+    return profile_store.save_profile(profile_type, profile_id, p)
+
+
+@app.get("/api/devices/{mac}/profiles/preview-hostname")
+def preview_hostname(mac: str, template: str, db: Session = Depends(get_session)):
+    """Preview what a hostname template resolves to for a specific device."""
+    mac = mac.upper()
+    device = db.get(Device, mac)
+    if not device:
+        raise HTTPException(404)
+    result = profile_store.apply_hostname_template(template, {
+        "mac": device.mac, "hostname": device.hostname, "model": device.model,
+    })
+    return {"preview": result}
+
+
+@app.post("/api/configure/pool")
+async def configure_pool_fleet(body: dict, db: Session = Depends(get_session)):
+    """Apply pool profile to one or more devices."""
+    macs = [m.upper() for m in body.get("macs", [])]
+    if not macs:
+        raise HTTPException(400, "macs required")
+
+    payload = {}
+    for f in ["stratumURL","stratumPort","stratumUser","stratumPassword","stratumTLS",
+              "fallbackStratumURL","fallbackStratumPort","fallbackStratumUser",
+              "fallbackStratumPassword","fallbackStratumTLS"]:
+        if f in body:
+            payload[f] = body[f]
+    if "stratumPort" in payload:
+        payload["stratumPort"] = int(payload["stratumPort"])
+    if "fallbackStratumPort" in payload:
+        payload["fallbackStratumPort"] = int(payload["fallbackStratumPort"])
+
+    results = {}
+    async def push(mac, ip):
+        r = await _patch_device(ip, payload)
+        if body.get("restart") and r["ok"]:
+            await asyncio.sleep(0.3)
+            await _restart_device(ip)
+        results[mac] = r
+        if r["ok"]:
+            al = AlertLog(mac=mac, alert_type="configure_apply",
+                message=f"Pool profile applied: {body.get('_profile_name','custom')}")
+            with Session(engine) as ldb:
+                ldb.add(al); ldb.commit()
+
+    tasks = []
+    for mac in macs:
+        device = db.get(Device, mac)
+        if device and device.last_ip:
+            tasks.append(push(mac, device.last_ip))
+        else:
+            results[mac] = {"ok": False, "error": "No IP known"}
+    await asyncio.gather(*tasks)
+    success = sum(1 for r in results.values() if r.get("ok"))
+    return {"total": len(macs), "success": success, "failed": len(macs)-success, "results": results}
+
+
+@app.post("/api/configure/system")
+async def configure_system_fleet(body: dict, db: Session = Depends(get_session)):
+    """Apply system profile to one or more devices."""
+    macs = [m.upper() for m in body.get("macs", [])]
+    if not macs:
+        raise HTTPException(400, "macs required")
+
+    results = {}
+    async def push(mac, ip, device):
+        payload = {}
+        # Hostname template
+        template = body.get("hostname_template", "")
+        if template:
+            hostname = profile_store.apply_hostname_template(template, {
+                "mac": device.mac, "hostname": device.hostname, "model": device.model,
+            })
+            payload["hostname"] = hostname
+        # WiFi — only if both fields provided
+        if body.get("wifi_ssid") and body.get("wifi_password"):
+            payload["ssid"] = body["wifi_ssid"]
+            payload["wifiPass"] = body["wifi_password"]
+        for f in ["displayTimeout","rotation","invertscreen","autoscreenoff","statsFrequency"]:
+            if f in body:
+                payload[f] = body[f]
+        if not payload:
+            results[mac] = {"ok": True, "skipped": True, "msg": "Nothing to apply"}
+            return
+        r = await _patch_device(ip, payload)
+        if body.get("restart") and r["ok"]:
+            await asyncio.sleep(0.3)
+            await _restart_device(ip)
+        results[mac] = r
+        if r["ok"]:
+            al = AlertLog(mac=mac, alert_type="configure_apply",
+                message=f"System profile applied: {body.get('_profile_name','custom')}")
+            with Session(engine) as ldb:
+                ldb.add(al); ldb.commit()
+
+    tasks = []
+    for mac in macs:
+        device = db.get(Device, mac)
+        if device and device.last_ip:
+            tasks.append(push(mac, device.last_ip, device))
+        else:
+            results[mac] = {"ok": False, "error": "No IP known"}
+    await asyncio.gather(*tasks)
+    success = sum(1 for r in results.values() if r.get("ok"))
+    return {"total": len(macs), "success": success, "failed": len(macs)-success, "results": results}
+
+
+@app.post("/api/configure/hardware")
+async def configure_hardware(body: dict, db: Session = Depends(get_session)):
+    """Apply hardware profile — per device only OR fleet if confirmed and same model."""
+    if not body.get("confirmed"):
+        raise HTTPException(400, "confirmed=true required for hardware changes")
+
+    macs = [m.upper() for m in body.get("macs", [])]
+    if not macs:
+        raise HTTPException(400, "macs required")
+
+    model_lock = body.get("model_lock")
+
+    # Validate all devices are same model if model_lock set
+    if model_lock:
+        mismatched = []
+        for mac in macs:
+            device = db.get(Device, mac)
+            if device and device.model != model_lock:
+                mismatched.append({"mac": mac, "model": device.model})
+        if mismatched:
+            raise HTTPException(400, {
+                "error": "Model mismatch — hardware profiles can only be applied to matching device types",
+                "model_lock": model_lock,
+                "mismatched": mismatched,
+            })
+
+    results = {}
+    async def push(mac, ip):
+        payload = {"overclockEnabled": 1}
+        if body.get("use_factory_defaults"):
+            payload = {"overclockEnabled": 0}
+        else:
+            if body.get("frequency"):
+                payload["frequency"] = int(body["frequency"])
+            if body.get("coreVoltage"):
+                payload["coreVoltage"] = int(body["coreVoltage"])
+        # Fan settings always apply
+        if "autofanspeed" in body:
+            payload["autofanspeed"] = 1 if body["autofanspeed"] else 0
+        if not body.get("autofanspeed") and "fanspeed" in body:
+            payload["fanspeed"] = int(body["fanspeed"])
+        if "temptarget" in body:
+            payload["temptarget"] = int(body["temptarget"])
+        if "overheat_temp" in body:
+            payload["overheat_temp"] = int(body["overheat_temp"])
+
+        r = await _patch_device(ip, payload)
+        if body.get("restart") and r["ok"]:
+            await asyncio.sleep(0.5)
+            await _restart_device(ip)
+        results[mac] = r
+        # Always log hardware changes
+        device = db.get(Device, mac)
+        al = AlertLog(mac=mac, alert_type="configure_apply",
+            message=f"Hardware profile applied: {body.get('_profile_name','custom')} — freq={body.get('frequency')} volt={body.get('coreVoltage')}")
+        with Session(engine) as ldb:
+            ldb.add(al); ldb.commit()
+
+    tasks = []
+    for mac in macs:
+        device = db.get(Device, mac)
+        if device and device.last_ip:
+            tasks.append(push(mac, device.last_ip))
+        else:
+            results[mac] = {"ok": False, "error": "No IP known"}
+    await asyncio.gather(*tasks)
+    success = sum(1 for r in results.values() if r.get("ok"))
+    return {"total": len(macs), "success": success, "failed": len(macs)-success, "results": results}
+
+
+@app.get("/api/configure/history")
+def configure_history(limit: int = 100, db: Session = Depends(get_session)):
+    logs = db.exec(
+        select(AlertLog).where(AlertLog.alert_type == "configure_apply")
+        .order_by(AlertLog.ts.desc()).limit(limit)
+    ).all()
+    return logs
 
 
 # ── Settings ──────────────────────────────────────────────────────────────────

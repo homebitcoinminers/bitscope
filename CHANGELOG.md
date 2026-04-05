@@ -1,5 +1,37 @@
 # BitScope Changelog
 
+## v0.5.0 — 2026-04-05
+
+### Added — Configure page (major rework)
+- **Dedicated Configure page** — replaces all per-device and fleet modals with a unified left-nav page accessible from sidebar and device detail
+- **Three typed profile types** — Pool, System, Hardware stored in separate subdirectories `/data/profiles/<type>/`
+- **Pool profiles** — primary + fallback pool, worker, password, TLS. Fleet-safe (any model)
+- **System profiles** — hostname template with token engine (`{devicename}`, `{model}`, `{last4mac}`, `{mac}`), WiFi (skipped if blank), display timeout, stats frequency. Fleet-safe
+- **Hardware profiles** — fan, temps, frequency, core voltage. Model-locked: stored with `model_lock` field, fleet apply blocked if devices contain mismatched models
+- **Live hostname preview** — resolves template tokens against each selected device before applying, shown in both edit and confirm screens
+- **Device selector** — right sidebar with model group quick-select buttons, online filter, model-lock greyed-out indicator
+- **Two-step confirmation** — pool applies immediately, system and hardware go through a review screen showing exactly what will change per device
+- **Apply history** — every configure action logged with timestamp, device, action description, visible in Configure page
+- **Saved profiles sidebar** — click any saved profile to pre-fill the current form instantly
+- **Factory defaults revert** — hardware profiles can set `use_factory_defaults: true` to revert ASIC to firmware defaults without needing to know the values
+- **WiFi safety warning** — shown in both edit and confirm screens when WiFi SSID is being changed
+- **Model mismatch warning** — shown inline when hardware profile `model_lock` doesn't match all selected devices
+- **Capture from device** — reads live device API and creates a typed profile (pool/system/hardware separately)
+
+### Changed
+- Configure button on device detail page now navigates to Configure page pre-filtered to that device instead of opening a modal
+- Fleet config button on Devices page now navigates to Configure page
+- Profiles page redesigned with type selector (Pool/System/Hardware tabs), matching the three profile types
+- `profiles.py` completely rewritten with typed subdirectory structure and `ensure_dirs()` seeding all three defaults on first boot
+
+### Removed
+- `ConfigurePanel.jsx` (per-device modal) — replaced by Configure page
+- `FleetConfigPanel.jsx` (fleet modal) — replaced by Configure page
+- Old `/api/fleet/configure/pool` endpoint — replaced by `/api/configure/pool` (takes `macs[]`)
+- Old `/api/devices/{mac}/configure/pool` and `/api/devices/{mac}/configure/system` — merged into fleet endpoints
+
+---
+
 ## v0.4.3 — 2026-04-05
 
 ### Fixed
