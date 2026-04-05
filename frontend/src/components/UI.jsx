@@ -101,10 +101,11 @@ export function EmptyState({ icon = '📭', title, sub }) {
 
 export function formatDate(ts, includeTime = true) {
   if (!ts) return '—'
-  const tz = window.__bsTz === 'utc' ? 'UTC' : undefined
+  const tz = window.__bsTz
+  const timeZone = (!tz || tz === 'local') ? undefined : tz
   const opts = includeTime
-    ? { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: tz }
-    : { year: 'numeric', month: 'short', day: 'numeric', timeZone: tz }
+    ? { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone }
+    : { year: 'numeric', month: 'short', day: 'numeric', timeZone }
   return new Date(ts).toLocaleString(undefined, opts)
 }
 

@@ -2,7 +2,7 @@ import json
 import os
 import csv
 import io
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from contextlib import asynccontextmanager
 
@@ -19,6 +19,13 @@ from models import (
 )
 from scanner import scan_and_discover, poll_all_devices, upsert_device, fetch_device_info, get_discord_enabled, set_discord_enabled
 import aiohttp
+
+def isoZ(dt):
+    """Serialize datetime as UTC ISO string with Z suffix so browsers parse it correctly."""
+    if dt is None:
+        return None
+    return dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+
 
 scheduler = AsyncIOScheduler()
 
@@ -81,8 +88,8 @@ def list_devices(db: Session = Depends(get_session)):
             "asic_model": d.asic_model,
             "asic_count": d.asic_count,
             "firmware_version": d.firmware_version,
-            "first_seen": d.first_seen,
-            "last_seen": d.last_seen,
+            "first_seen": isoZ(d.first_seen),
+            "last_seen": isoZ(d.last_seen),
             "last_ip": d.last_ip,
             "hostname": d.hostname,
             "is_manual": d.is_manual,
@@ -115,8 +122,8 @@ def get_device(mac: str, db: Session = Depends(get_session)):
         "asic_count": device.asic_count,
         "board_version": device.board_version,
         "firmware_version": device.firmware_version,
-        "first_seen": device.first_seen,
-        "last_seen": device.last_seen,
+        "first_seen": isoZ(device.first_seen),
+        "last_seen": isoZ(device.last_seen),
         "last_ip": device.last_ip,
         "hostname": device.hostname,
         "is_manual": device.is_manual,
@@ -411,6 +418,69 @@ def fleet_stats(db: Session = Depends(get_session)):
     }
 
 
+@app.get("/api/export/csv")
+def export_metrics_csv(
+    since: Optional[datetime] = Query(None),
+    until: Optional[datetime] = Query(None),
+    mac: Optional[str] = Query(None),
+    db: Session = Depends(get_session),
+):
+    """Export all metric data for a date range, optionally filtered by device."""
+    q = select(MetricSnapshot)
+    if mac and mac != 'all':
+        q = q.where(MetricSnapshot.mac == mac.upper())
+    if since:
+        q = q.where(MetricSnapshot.ts >= since)
+    if until:
+        q = q.where(MetricSnapshot.ts <= until)
+    q = q.order_by(MetricSnapshot.ts.asc())
+    snapshots = db.exec(q).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["BitScope — Metric Export"])
+    writer.writerow(["Generated", datetime.utcnow().isoformat() + "Z"])
+    writer.writerow(["Device", mac or "all"])
+    writer.writerow(["From", since or "beginning"])
+    writer.writerow(["To", until or "now"])
+    writer.writerow(["Total rows", len(snapshots)])
+    writer.writerow([])
+    writer.writerow([
+        "Timestamp", "MAC", "Session ID",
+        "Hashrate GH/s", "Hashrate 1m", "Hashrate 10m", "Hashrate 1h",
+        "Expected Hashrate", "Temp °C", "VR Temp °C",
+        "Power W", "Voltage mV", "Frequency MHz",
+        "Core Voltage mV", "Core Voltage Actual mV",
+        "Fan RPM", "Fan2 RPM", "Fan Speed %",
+        "Error %", "Shares Accepted", "Shares Rejected",
+        "Best Diff", "Best Session Diff",
+        "Uptime s", "WiFi RSSI dBm",
+        "ASIC Temps", "Duplicate HW Nonces",
+        "Ping RTT ms", "Ping Loss %", "Pool Difficulty",
+        "Max Power W", "Min Power W",
+    ])
+    for s in snapshots:
+        writer.writerow([
+            s.ts.strftime('%Y-%m-%dT%H:%M:%SZ'), s.mac, s.session_id,
+            s.hashrate, s.hashrate_1m, s.hashrate_10m, s.hashrate_1h,
+            s.expected_hashrate, s.temp, s.vr_temp,
+            s.power, s.voltage, s.frequency,
+            s.core_voltage, s.core_voltage_actual,
+            s.fan_rpm, s.fan2_rpm, s.fan_speed,
+            s.error_percentage, s.shares_accepted, s.shares_rejected,
+            s.best_diff, s.best_session_diff,
+            s.uptime_seconds, s.wifi_rssi,
+            s.asic_temps, s.duplicate_hw_nonces,
+            s.last_ping_rtt, s.recent_ping_loss, s.pool_difficulty,
+            s.max_power, s.min_power,
+        ])
+    output.seek(0)
+    tag = mac.replace(':', '') if mac and mac != 'all' else 'all'
+    filename = f"bitscope_export_{tag}_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+    return StreamingResponse(output, media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
 # ── Settings ──────────────────────────────────────────────────────────────────
 
 @app.get("/api/settings")
@@ -436,7 +506,7 @@ def _snapshot_dict(s: MetricSnapshot) -> dict:
     return {
         "id": s.id,
         "mac": s.mac,
-        "ts": s.ts,
+        "ts": isoZ(s.ts),
         "session_id": s.session_id,
         "hashrate": s.hashrate,
         "hashrate_1m": s.hashrate_1m,
@@ -477,8 +547,8 @@ def _session_dict(s: DBSession) -> dict:
         "mac": s.mac,
         "label": s.label,
         "notes": s.notes,
-        "started_at": s.started_at,
-        "ended_at": s.ended_at,
+        "started_at": isoZ(s.started_at),
+        "ended_at": isoZ(s.ended_at),
         "verdict": s.verdict,
         "verdict_reasons": json.loads(s.verdict_reasons) if s.verdict_reasons else [],
         "duration_minutes": int((s.ended_at - s.started_at).total_seconds() / 60) if s.ended_at else None,

@@ -88,13 +88,26 @@ function Sidebar() {
   const { theme, themeName, cycleTheme } = useContext(ThemeContext)
   const [discordEnabled, setDiscordEnabled] = useState(true)
   const [loadingDiscord, setLoadingDiscord] = useState(false)
-  const [tz, setTz] = useState(() => localStorage.getItem('bs-tz') || 'local')
+  const [tz, setTz] = useState(() => localStorage.getItem('bs-tz') || 'Australia/Brisbane')
+
+  const TZ_OPTIONS = [
+    { value: 'local', label: 'Browser local' },
+    { value: 'UTC', label: 'UTC ±0' },
+    { value: 'Australia/Brisbane', label: 'AEST +10' },
+    { value: 'Australia/Sydney', label: 'AEDT +10/11' },
+    { value: 'Australia/Adelaide', label: 'ACST +9:30' },
+    { value: 'Australia/Perth', label: 'AWST +8' },
+    { value: 'Asia/Singapore', label: 'SGT +8' },
+    { value: 'Europe/London', label: 'GMT/BST' },
+    { value: 'Europe/Berlin', label: 'CET/CEST' },
+    { value: 'America/New_York', label: 'ET' },
+    { value: 'America/Los_Angeles', label: 'PT' },
+  ]
 
   useEffect(() => {
     api.settings().then(s => setDiscordEnabled(s.discord_enabled)).catch(() => {})
   }, [])
 
-  // Expose tz globally so other components can use it
   useEffect(() => {
     window.__bsTz = tz
     localStorage.setItem('bs-tz', tz)
@@ -188,14 +201,18 @@ function Sidebar() {
           </button>
         </div>
 
-        {/* Timezone toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 11, color: theme.muted }}>🕐 Timezone</span>
-          <button onClick={() => setTz(t => t === 'local' ? 'utc' : 'local')} style={{
-            fontSize: 10, padding: '2px 8px', borderRadius: 4,
-            border: `0.5px solid ${theme.border}`,
-            background: 'transparent', color: theme.muted, cursor: 'pointer',
-          }}>{tz === 'local' ? 'Local' : 'UTC'}</button>
+        {/* Timezone select */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ fontSize: 10, color: theme.faint }}>🕐 Timezone</span>
+          <select value={tz} onChange={e => setTz(e.target.value)} style={{
+            border: `0.5px solid ${theme.border}`, borderRadius: 5,
+            padding: '3px 6px', fontSize: 11,
+            background: theme.inputBg, color: theme.muted, cursor: 'pointer',
+          }}>
+            {TZ_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
         </div>
 
         {/* Theme toggle */}

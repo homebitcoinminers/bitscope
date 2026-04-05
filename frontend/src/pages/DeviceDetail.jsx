@@ -180,6 +180,10 @@ export default function DeviceDetail() {
             <Badge color={online ? 'green' : 'gray'}>{online ? 'online' : 'offline'}</Badge>
             <Btn onClick={() => setEditing(true)} small>Rename</Btn>
             <Btn onClick={() => api.identifyDevice(mac)} small>Identify 💡</Btn>
+            <button onClick={() => { loadDevice(); loadMetrics() }} title="Refresh now" style={{
+              background: 'none', border: `0.5px solid ${theme.border}`, borderRadius: 6,
+              padding: '4px 8px', cursor: 'pointer', color: theme.muted, fontSize: 16, lineHeight: 1,
+            }}>↻</button>
             {device.active_session_id
               ? <Btn onClick={endSession} small danger>End session</Btn>
               : <Btn onClick={startSession} small primary>Start test session</Btn>
