@@ -124,11 +124,12 @@ export function formatUptime(seconds) {
 
 export function formatDiff(d) {
   if (!d) return '—'
+  if (d >= 1e15) return `${(d / 1e15).toFixed(2)}P`
   if (d >= 1e12) return `${(d / 1e12).toFixed(2)}T`
-  if (d >= 1e9) return `${(d / 1e9).toFixed(2)}B`
-  if (d >= 1e6) return `${(d / 1e6).toFixed(2)}M`
-  if (d >= 1e3) return `${(d / 1e3).toFixed(1)}K`
-  return `${d}`
+  if (d >= 1e9)  return `${(d / 1e9).toFixed(2)}G`
+  if (d >= 1e6)  return `${(d / 1e6).toFixed(2)}M`
+  if (d >= 1e3)  return `${(d / 1e3).toFixed(2)}K`
+  return `${Math.round(d)}`
 }
 
 export function healthColor(latest) {

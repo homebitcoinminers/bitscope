@@ -343,6 +343,49 @@ def upsert_threshold(scope: str, body: dict, db: Session = Depends(get_session))
     return t
 
 
+@app.delete("/api/thresholds/{scope:path}")
+def delete_threshold(scope: str, db: Session = Depends(get_session)):
+    if scope == "global":
+        raise HTTPException(400, "Cannot delete global defaults")
+    t = db.exec(select(ThresholdConfig).where(ThresholdConfig.scope == scope)).first()
+    if not t:
+        raise HTTPException(404)
+    db.delete(t)
+    db.commit()
+    return {"ok": True}
+
+
+# ── Alert settings ─────────────────────────────────────────────────────────────
+
+# In-memory alert type enable/disable (persists via settings endpoint)
+# Defaults: all enabled
+_alert_types_enabled: dict = {
+    "overheat": True,
+    "vr_overheat": True,
+    "asic_overheat": True,
+    "error_rate": True,
+    "hw_nonce": True,
+    "power_over_spec": True,
+    "fan_failure": True,
+    "weak_wifi": True,
+    "offline": True,
+    "online": True,
+    "new_device": True,
+    "new_best_diff": True,
+}
+
+@app.get("/api/settings/alerts")
+def get_alert_settings():
+    return _alert_types_enabled
+
+@app.post("/api/settings/alerts")
+def set_alert_settings(body: dict):
+    for k, v in body.items():
+        if k in _alert_types_enabled:
+            _alert_types_enabled[k] = bool(v)
+    return _alert_types_enabled
+
+
 # ── Alerts ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/alerts")
@@ -419,6 +462,58 @@ def fleet_stats(db: Session = Depends(get_session)):
     }
 
 
+@app.get("/api/stats/fleet/history")
+def fleet_history(hours: int = 24, db: Session = Depends(get_session)):
+    """Aggregated fleet hashrate/power/efficiency over time for graphing."""
+    since = datetime.utcnow() - timedelta(hours=hours)
+    snapshots = db.exec(
+        select(MetricSnapshot).where(MetricSnapshot.ts >= since).order_by(MetricSnapshot.ts.asc())
+    ).all()
+
+    # Bucket into 10-minute intervals
+    from collections import defaultdict
+    buckets = defaultdict(lambda: {"hashrate": [], "power": []})
+    for s in snapshots:
+        bucket = s.ts.replace(second=0, microsecond=0)
+        bucket = bucket.replace(minute=(s.ts.minute // 10) * 10)
+        key = bucket.strftime("%Y-%m-%dT%H:%M:%SZ")
+        if s.hashrate: buckets[key]["hashrate"].append(s.hashrate)
+        if s.power: buckets[key]["power"].append(s.power)
+
+    result = []
+    for ts_key in sorted(buckets.keys()):
+        b = buckets[ts_key]
+        hr = sum(b["hashrate"]) if b["hashrate"] else 0
+        pw = sum(b["power"]) if b["power"] else 0
+        eff = (pw / (hr / 1000)) if hr > 0 else 0
+        result.append({
+            "ts": ts_key,
+            "hashrate_gh": round(hr, 2),
+            "power_w": round(pw, 2),
+            "efficiency": round(eff, 2),
+        })
+    return result
+
+
+# 24hr max temp per device for table column
+@app.get("/api/stats/devices/maxtemp")
+def devices_max_temp(db: Session = Depends(get_session)):
+    since = datetime.utcnow() - timedelta(hours=24)
+    devices = db.exec(select(Device)).all()
+    result = {}
+    for d in devices:
+        snaps = db.exec(
+            select(MetricSnapshot.temp).where(
+                MetricSnapshot.mac == d.mac,
+                MetricSnapshot.ts >= since,
+                MetricSnapshot.temp != None,
+            )
+        ).all()
+        if snaps:
+            result[d.mac] = round(max(snaps), 1)
+    return result
+
+
 @app.get("/api/export/csv")
 def export_metrics_csv(
     since: Optional[datetime] = Query(None),
@@ -490,6 +585,7 @@ def get_settings():
         "discord_enabled": get_discord_enabled(),
         "poll_interval": int(os.getenv("POLL_INTERVAL", "30")),
         "scan_interval": int(os.getenv("SCAN_INTERVAL", "300")),
+        "alert_types": _alert_types_enabled,
     }
 
 @app.post("/api/settings/discord/toggle")

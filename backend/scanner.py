@@ -14,6 +14,15 @@ from models import Device, MetricSnapshot, AlertLog, ScanConfig, Session as DBSe
 
 logger = logging.getLogger("bitscope.scanner")
 
+def _fmt_diff(d):
+    if not d: return "—"
+    if d >= 1e15: return f"{d/1e15:.2f}P"
+    if d >= 1e12: return f"{d/1e12:.2f}T"
+    if d >= 1e9:  return f"{d/1e9:.2f}G"
+    if d >= 1e6:  return f"{d/1e6:.2f}M"
+    if d >= 1e3:  return f"{d/1e3:.2f}K"
+    return str(int(d))
+
 POLL_TIMEOUT = 8
 SCAN_CONCURRENCY = 30
 
@@ -312,9 +321,20 @@ async def scan_and_discover():
                 db.commit()
 
 
+# Track best diff per device for new record alerts
+_best_diff_records: dict[str, float] = {}
+
+
 async def send_discord_alert(alert: AlertLog, device: Device, resolved: bool = False):
     if not _discord_enabled:
         return
+    # Check if this alert type is enabled
+    try:
+        from main import _alert_types_enabled
+        if not _alert_types_enabled.get(alert.alert_type, True):
+            return
+    except ImportError:
+        pass
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL", "")
     if not webhook_url:
         return

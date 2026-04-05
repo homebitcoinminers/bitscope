@@ -32,6 +32,12 @@ export default function Thresholds() {
     setThresholds(t)
     setDevices(d)
   }
+
+  const deleteScope = async (scope) => {
+    if (!confirm(`Delete threshold override for "${scope}"?`)) return
+    await api.deleteThreshold(scope)
+    load()
+  }
   useEffect(() => { load() }, [])
 
   const startEdit = (t) => {
@@ -100,7 +106,10 @@ export default function Thresholds() {
                       <Btn small onClick={() => setEditing(null)}>Cancel</Btn>
                     </>
                   ) : (
-                    <Btn small onClick={() => startEdit(t)}>Edit</Btn>
+                    <>
+                      <Btn small onClick={() => startEdit(t)}>Edit</Btn>
+                      {t.scope !== 'global' && <Btn small danger onClick={() => deleteScope(t.scope)}>Delete</Btn>}
+                    </>
                   )}
                 </div>
               </div>

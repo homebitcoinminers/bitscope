@@ -46,10 +46,6 @@ export const api = {
     window.open(`/api/sessions/${id}/export/csv`, '_blank')
   },
 
-  // Thresholds
-  thresholds: () => req('GET', '/thresholds'),
-  setThreshold: (scope, body) => req('PUT', `/thresholds/${scope}`, body),
-
   // Alerts
   alerts: (limit = 100) => req('GET', `/alerts?limit=${limit}`),
 
@@ -62,4 +58,15 @@ export const api = {
   // Settings
   settings: () => req('GET', '/settings'),
   toggleDiscord: () => req('POST', '/settings/discord/toggle'),
+  getAlertSettings: () => req('GET', '/settings/alerts'),
+  setAlertSettings: (body) => req('POST', '/settings/alerts', body),
+
+  // Fleet history + device stats
+  fleetHistory: (hours = 24) => req('GET', `/stats/fleet/history?hours=${hours}`),
+  devicesMaxTemp: () => req('GET', '/stats/devices/maxtemp'),
+
+  // Thresholds
+  thresholds: () => req('GET', '/thresholds'),
+  setThreshold: (scope, body) => req('PUT', `/thresholds/${scope}`, body),
+  deleteThreshold: (scope) => req('DELETE', `/thresholds/${encodeURIComponent(scope)}`),
 }
