@@ -8,6 +8,7 @@ import Scanner from './pages/Scanner.jsx'
 import Thresholds from './pages/Thresholds.jsx'
 import Logs from './pages/Logs.jsx'
 import PoolMonitor from './pages/PoolMonitor.jsx'
+import PoolChecker from './pages/PoolChecker.jsx'
 import Profiles from './pages/Profiles.jsx'
 import Configure from './pages/Configure.jsx'
 import { api } from './api.js'
@@ -49,6 +50,7 @@ const NAV = [
   { to: '/alerts', label: 'Alerts', icon: BellIcon },
   { to: '/configure', label: 'Configure', icon: WrenchIcon },
   { to: '/pool-monitor', label: 'Pool Monitor', icon: PoolIcon },
+  { to: '/pool-checker', label: 'Pool Checker', icon: CheckerIcon },
   { to: '/scanner', label: 'Scanner', icon: RadarIcon },
   { to: '/profiles', label: 'Profiles', icon: ProfileIcon },
   { to: '/thresholds', label: 'Thresholds', icon: SliderIcon },
@@ -88,6 +90,7 @@ export default function App() {
               <Route path="/profiles" element={<Profiles />} />
               <Route path="/configure" element={<Configure />} />
               <Route path="/pool-monitor" element={<PoolMonitor />} />
+              <Route path="/pool-checker" element={<PoolChecker />} />
             </Routes>
           </main>
         </div>
@@ -300,6 +303,9 @@ function SliderIcon({ size = 14 }) {
 }
 function ShieldIcon({ size = 16, color = 'currentColor' }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill={color}><path d="M8 1L2 4v4c0 3.5 2.5 6.5 6 7.5 3.5-1 6-4 6-7.5V4L8 1z"/></svg>
+}
+function CheckerIcon({ size = 14 }) {
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1zM6 11L3.5 8.5l1-1L6 9l5.5-5.5 1 1L6 11z"/></svg>
 }
 function PoolIcon({ size = 14 }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm0 2a3 3 0 100 6A3 3 0 008 5z"/></svg>

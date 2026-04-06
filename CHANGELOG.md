@@ -1,5 +1,22 @@
 # BitScope Changelog
 
+## v0.6.2 — 2026-04-06
+
+### Fixed / Improved
+- **Pool checker now shows actual Bitcoin addresses** — coinbase outputs are fully decoded using bech32 encoding. P2WPKH (bc1q…), P2TR (bc1p…), P2WSH, P2PKH (1…) and P2SH (3…) addresses all resolved correctly
+- **Correct coinbase assembly** — coinbase1 + extranonce1 + extranonce2(zeros, correct size) + coinbase2 is now assembled exactly as per Stratum V1 spec, matching what pool_checkr produces
+- **Block height decoded** — BIP34 block height extracted from coinbase script
+- **nTime decoded** — timestamp shown as UTC datetime
+- **ScriptSig text shown** — full coinbase script decoded as ASCII (pool identity, block height, etc.)
+- **OP_RETURN data decoded** — null data outputs shown with decoded text
+- **Pool Checker moved to sidebar** — dedicated page accessible directly from nav, separate from Pool Monitor
+
+### Added
+- **Pure Python bech32 encoder** — no runtime dependencies, supports P2WPKH, P2WSH, P2TR (bech32m)
+- **nBits→difficulty** — converts compact difficulty target from notify params
+
+---
+
 ## v0.6.1 — 2026-04-06
 
 ### Added
