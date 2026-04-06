@@ -357,7 +357,7 @@ export default function Configure() {
         ? ['Action', 'Revert to factory defaults']
         : hw.frequency && ['Frequency', `${hw.frequency} MHz`],
       !hw.use_factory_defaults && hw.coreVoltage && ['Core voltage', `${hw.coreVoltage} mV`],
-      ['Fan mode', hw.autofanspeed ? `Auto (target ${hw.temptarget}°C)` : `Manual ${hw.fanspeed}%`],
+      ['Fan mode', hw.autofanspeed ? `Auto Fan Control PID (target ${hw.temptarget}°C)` : `Manual ${hw.fanspeed}%`],
       ['Overheat temp', `${hw.overheat_temp}°C`],
       ['Restart', hw.restart ? 'Yes' : 'No'],
     ].filter(Boolean)
@@ -512,21 +512,25 @@ export default function Configure() {
                   </Field>
 
                   <SectionTitle>🌡️ Fan &amp; thermal</SectionTitle>
-                  <div style={{ marginBottom: 10 }}>
-                    <Toggle value={hw.autofanspeed} onChange={v => setHw(h => ({ ...h, autofanspeed: v }))} label="Auto fan speed" />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 4 }}>
+                    <Field label="Fan controller mode" desc="Matches the Fan Controller dropdown on the device">
+                      <select value={hw.autofanspeed ? 'auto' : 'manual'} onChange={e => setHw(h => ({ ...h, autofanspeed: e.target.value === 'auto' }))}
+                        style={{ width: '100%', border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '6px 10px', fontSize: 12, background: theme.inputBg, color: theme.text }}>
+                        <option value="manual">Manual</option>
+                        <option value="auto">Auto Fan Control (PID)</option>
+                      </select>
+                    </Field>
+                    <Field label="Overheat temperature (°C)">
+                      <Inp value={hw.overheat_temp} onChange={v => setHw(h => ({ ...h, overheat_temp: Number(v) }))} type="number" />
+                    </Field>
                     {hw.autofanspeed
-                      ? <Field label="Target temperature (°C)" desc="Fan adjusts to maintain this temp">
+                      ? <Field label="Target temperature (°C)" desc="Fan PID will maintain this temp">
                           <Inp value={hw.temptarget} onChange={v => setHw(h => ({ ...h, temptarget: Number(v) }))} type="number" />
                         </Field>
                       : <Field label="Manual fan speed (%)" desc="0–100, min 25 recommended">
                           <Inp value={hw.fanspeed} onChange={v => setHw(h => ({ ...h, fanspeed: Number(v) }))} type="number" />
                         </Field>
                     }
-                    <Field label="Overheat temperature (°C)">
-                      <Inp value={hw.overheat_temp} onChange={v => setHw(h => ({ ...h, overheat_temp: Number(v) }))} type="number" />
-                    </Field>
                   </div>
 
                   <SectionTitle>⚡ ASIC tuning</SectionTitle>

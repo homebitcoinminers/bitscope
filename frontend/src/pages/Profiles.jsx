@@ -270,7 +270,13 @@ export default function Profiles() {
                       </div>
                       <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10, paddingBottom: 6, borderBottom: `0.5px solid ${theme.border}` }}>Fan & thermal</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-                        <PF label="Auto fan speed"><ProfileTog value={!!form.autofanspeed} onChange={v => setForm(f => ({...f, autofanspeed: v}))} /></PF>
+                        <PF label="Fan controller mode">
+                          <select value={form.autofanspeed ? 'auto' : 'manual'} onChange={e => setForm(f => ({...f, autofanspeed: e.target.value === 'auto'}))}
+                            style={{ width: '100%', border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '5px 10px', fontSize: 12, background: theme.inputBg, color: theme.text }}>
+                            <option value="manual">Manual</option>
+                            <option value="auto">Auto Fan Control (PID)</option>
+                          </select>
+                        </PF>
                         {form.autofanspeed
                           ? <PF label="Target temp (°C)"><ProfileInp type="number" value={form.temptarget || ''} onChange={sp('temptarget')} /></PF>
                           : <PF label="Manual fan speed (%)"><ProfileInp type="number" value={form.fanspeed ?? 100} onChange={sp('fanspeed')} /></PF>
@@ -340,7 +346,7 @@ function ReadOnly({ profile: p }) {
       {p.type === 'hardware' && (
         <div>
           <R label="Model lock"      value={p.model_lock || 'None'} />
-          <R label="Fan"             value={p.autofanspeed ? `Auto (target ${p.temptarget}°C)` : `Manual ${p.fanspeed ?? 100}%`} />
+          <R label="Fan"             value={p.autofanspeed ? `Auto Fan Control PID (target ${p.temptarget}°C)` : `Manual ${p.fanspeed ?? 100}%`} />
           <R label="Overheat temp"   value={p.overheat_temp ? `${p.overheat_temp}°C` : '—'} />
           <R label="Factory defaults" value={p.use_factory_defaults ? 'Yes — revert to firmware defaults' : 'No — custom values'} />
           {!p.use_factory_defaults && <>

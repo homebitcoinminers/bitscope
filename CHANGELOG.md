@@ -1,5 +1,13 @@
 # BitScope Changelog
 
+## v0.5.4 — 2026-04-05
+
+### Fixed
+- **Auto fan mode broken on NerdQAxe++ / NerdOCTAxe** — the configure endpoint was sending `autofanspeed: 1` (integer) but the firmware expects `autofanspeed: "Auto Fan Control (PID)"` (string). Sending integer `1` triggers the firmware error `"invalid temp control mode: 1. Defaulting to manual mode 100%"`. Fixed: now sends the string `"Auto Fan Control (PID)"` for auto, and `""` for manual
+- **Fan controller shown as toggle** — replaced the on/off toggle with a dropdown matching exactly what the device UI shows: `Manual` / `Auto Fan Control (PID)`. Makes it unambiguous which mode maps to which firmware value
+
+---
+
 ## v0.5.3 — 2026-04-05
 
 ### Fixed

@@ -1080,6 +1080,16 @@ async def configure_system_fleet(body: dict, db: Session = Depends(get_session))
         for f in ["displayTimeout","rotation","invertscreen","autoscreenoff","statsFrequency"]:
             if f in body:
                 payload[f] = body[f]
+        # Fan settings in system profile (if included)
+        if "autofanspeed" in body:
+            if body["autofanspeed"]:
+                payload["autofanspeed"] = "Auto Fan Control (PID)"
+            else:
+                payload["autofanspeed"] = ""
+        if "fanspeed" in body:
+            payload["fanspeed"] = int(body["fanspeed"])
+        if "temptarget" in body:
+            payload["temptarget"] = int(body["temptarget"])
         if not payload:
             results[mac] = {"ok": True, "skipped": True, "msg": "Nothing to apply"}
             return
@@ -1143,8 +1153,15 @@ async def configure_hardware(body: dict, db: Session = Depends(get_session)):
             if body.get("coreVoltage"):
                 payload["coreVoltage"] = int(body["coreVoltage"])
         # Fan settings always apply
+        # Fan control — AxeOS variants differ:
+        # Standard Bitaxe: autofanspeed=0/1 (integer)
+        # NerdQAxe++/NerdOCTAxe: autofanspeed="" (manual) or "Auto Fan Control (PID)" (auto)
+        # We send both the string and integer forms; the device will use whichever it understands
         if "autofanspeed" in body:
-            payload["autofanspeed"] = 1 if body["autofanspeed"] else 0
+            if body["autofanspeed"]:
+                payload["autofanspeed"] = "Auto Fan Control (PID)"
+            else:
+                payload["autofanspeed"] = ""
         if "fanspeed" in body:
             payload["fanspeed"] = int(body["fanspeed"])
         if "temptarget" in body:
