@@ -77,7 +77,7 @@ export default function App() {
           <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', background: theme.bg }}>
             <Routes>
               <Route path="/" element={<Devices />} />
-              <Route path="/devices/:mac" element={<DeviceDetail key={tzKey} />} />
+              <Route path="/devices/:mac" element={<DeviceDetail />} />
               <Route path="/sessions" element={<Sessions />} />
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/scanner" element={<Scanner />} />
@@ -98,7 +98,6 @@ function Sidebar() {
   const [discordEnabled, setDiscordEnabled] = useState(true)
   const [loadingDiscord, setLoadingDiscord] = useState(false)
   const [tz, setTz] = useState(() => localStorage.getItem('bs-tz') || 'local')
-  const [tzKey, setTzKey] = useState(0)  // increment to force chart re-renders on tz change
   const [version, setVersion] = useState(null)
 
   useEffect(() => {
@@ -111,7 +110,8 @@ function Sidebar() {
   useEffect(() => {
     window.__bsTz = tz
     localStorage.setItem('bs-tz', tz)
-    setTzKey(k => k + 1)  // force chart components to re-render with new tz
+    // Dispatch event so pages can subscribe and re-fetch/re-render
+    window.dispatchEvent(new CustomEvent('bsTzChange', { detail: tz }))
   }, [tz])
 
   // Expose theme colors to window so Charts.jsx can read them without prop drilling
