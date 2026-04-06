@@ -1,5 +1,12 @@
 # BitScope Changelog
 
+## v0.6.3 — 2026-04-06
+
+### Fixed
+- **Pool checker payout analysis for fee-split SOLO** — when a SOLO pool shows two coinbase outputs (one to miner, one to pool operator fee address), the checker now correctly identifies this as non-custodial SOLO with a pool fee, rather than incorrectly classifying it as custodial. Specifically recognises the pattern: Output 1 = pool fee address, Output 2 = miner's wallet address (matching the stratum username). Adds a note explaining that if you run the pool yourself and both addresses are yours, you keep 100% of any block found.
+
+---
+
 ## v0.6.2 — 2026-04-06
 
 ### Fixed / Improved

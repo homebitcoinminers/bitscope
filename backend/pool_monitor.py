@@ -441,20 +441,42 @@ def _analyse_payout(result: dict, worker: str) -> dict:
         else:
             notes.append(f"Output {o['index']}: {o['value_btc']} BTC → {o['type']}")
 
-    # Non-custodial check: solo pool with single real output going to miner's address
-    if analysis["is_solo"] and len(real_outputs) == 1:
-        addr = real_outputs[0].get("address")
-        if addr and worker and addr.lower() == worker.split('.')[0].lower():
+    # Non-custodial check for SOLO pools
+    if analysis["is_solo"]:
+        worker_addr = worker.split('.')[0].lower() if worker else ""
+        
+        if len(real_outputs) == 1:
+            addr = real_outputs[0].get("address", "")
             analysis["is_custodial"] = False
-            notes.append(f"✅ Coinbase output address matches your wallet → non-custodial SOLO "
-                          f"(block reward paid directly to {addr})")
-        elif addr:
-            analysis["is_custodial"] = False  # single output is likely the miner's
-            notes.append(f"✅ Single coinbase output → {addr} — "
-                          "consistent with non-custodial (verify this is your address)")
-    elif analysis["is_solo"] and len(real_outputs) > 1:
-        analysis["is_custodial"] = True
-        notes.append(f"⚠️ {len(real_outputs)} coinbase outputs — pool takes a fee. Custodial arrangement.")
+            if addr.lower() == worker_addr:
+                notes.append(f"✅ Single coinbase output → your address ({addr}) — "
+                              "non-custodial SOLO. Block reward goes directly to you.")
+            else:
+                notes.append(f"✅ Single coinbase output → {addr} — "
+                              "non-custodial. Verify this is your wallet address.")
+        
+        elif len(real_outputs) == 2:
+            # Check if one output matches the miner — classic pool-operator fee split
+            addrs = [o.get("address","").lower() for o in real_outputs]
+            if worker_addr and worker_addr in addrs:
+                miner_out = next(o for o in real_outputs if o.get("address","").lower() == worker_addr)
+                fee_out   = next(o for o in real_outputs if o.get("address","").lower() != worker_addr)
+                analysis["is_custodial"] = False
+                analysis["payout_type"] = "SOLO (with pool fee)"
+                notes.append(f"✅ Non-custodial SOLO with pool operator fee split:")
+                notes.append(f"   • Your address ({miner_out.get('address')}) receives the block reward")
+                notes.append(f"   • Pool fee address ({fee_out.get('address')}) receives the operator fee")
+                notes.append(f"   Tip: if you run this pool yourself and both addresses are yours, "
+                              f"you keep 100% across both outputs.")
+            else:
+                analysis["is_custodial"] = True
+                notes.append(f"⚠️ 2 coinbase outputs, neither matches your worker address → "
+                              "pool takes full custody. Check pool fee structure.")
+        
+        elif len(real_outputs) > 2:
+            analysis["is_custodial"] = True
+            notes.append(f"⚠️ {len(real_outputs)} coinbase outputs — complex fee structure. "
+                          "Likely custodial with multiple fee recipients.")
 
     if result.get("authorized") is True:
         notes.append("✅ Pool accepted your wallet address as a stratum username.")
