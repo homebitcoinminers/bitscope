@@ -1,5 +1,18 @@
 # BitScope Changelog
 
+## v0.5.6 — 2026-04-06
+
+### Fixed
+- **Fan control completely broken** — three wrong field names confirmed by reading the device API directly:
+  - `autofanspeed` should be integer `2` (auto PID) or `0` (manual) — NOT the string `"Auto Fan Control (PID)"` and NOT `1`
+  - Manual fan speed should be sent as `manualFanSpeed` — NOT `fanspeed` (that field is read-only, it returns the current measured fan %)
+  - PID target temperature should be sent as `pidTargetTemp` — NOT `temptarget`
+- **Graphs skip offline periods** — when a device was powered off and back on, the chart drew a straight line across the downtime gap instead of showing a break. Fixed two ways:
+  1. Charts now use `connectNulls={false}` so null values break the line
+  2. Metrics API now inserts null sentinel rows at the edges of any gap > 3 minutes, making offline periods visible as blank space on the X axis
+
+---
+
 ## v0.5.5 — 2026-04-05
 
 ### Added (diagnostic)

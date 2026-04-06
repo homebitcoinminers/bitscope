@@ -47,7 +47,10 @@ export function MetricChart({ data, metric, label, unit = '', threshold, color, 
   )
 
   const c = color || COLORS[metric] || '#185fa5'
-  const chartData = data.map(s => ({ ts: s.ts, value: s[metric] })).filter(d => d.value != null)
+
+  // Keep null values so Recharts renders gaps for offline periods
+  // (connectNulls=false is default — null breaks the line, showing the gap)
+  const chartData = data.map(s => ({ ts: s.ts, value: s[metric] ?? null }))
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -77,6 +80,7 @@ export function MetricChart({ data, metric, label, unit = '', threshold, color, 
         <Line
           type="monotone" dataKey="value" name={label}
           stroke={c} strokeWidth={1.5} dot={false} activeDot={{ r: 3 }}
+          connectNulls={false}
         />
       </LineChart>
     </ResponsiveContainer>
@@ -90,11 +94,12 @@ export function HashrateChart({ data, height = 140 }) {
     </div>
   )
 
+  // Keep nulls — Recharts will break the line showing the offline gap
   const chartData = data.map(s => ({
     ts: s.ts,
-    'Now': s.hashrate != null ? +(s.hashrate / 1000).toFixed(3) : null,
+    'Now':    s.hashrate    != null ? +(s.hashrate    / 1000).toFixed(3) : null,
     '1m avg': s.hashrate_1m != null ? +(s.hashrate_1m / 1000).toFixed(3) : null,
-    '10m avg': s.hashrate_10m != null ? +(s.hashrate_10m / 1000).toFixed(3) : null,
+    '10m avg':s.hashrate_10m!= null ? +(s.hashrate_10m/ 1000).toFixed(3) : null,
   }))
 
   return (
@@ -105,9 +110,9 @@ export function HashrateChart({ data, height = 140 }) {
         <YAxis tick={{ fontSize: 10, fill: '#aaa' }} axisLine={false} tickLine={false} width={44} tickFormatter={v => `${v.toFixed(1)} TH`} />
         <Tooltip content={<CustomTooltip />} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Line type="monotone" dataKey="Now" stroke="#185fa5" strokeWidth={1.5} dot={false} activeDot={{ r: 3 }} />
-        <Line type="monotone" dataKey="1m avg" stroke="#5b9fd4" strokeWidth={1} dot={false} strokeDasharray="4 2" />
-        <Line type="monotone" dataKey="10m avg" stroke="#9ecae1" strokeWidth={1} dot={false} strokeDasharray="2 2" />
+        <Line type="monotone" dataKey="Now"     stroke="#185fa5" strokeWidth={1.5} dot={false} activeDot={{ r: 3 }} connectNulls={false} />
+        <Line type="monotone" dataKey="1m avg"  stroke="#5b9fd4" strokeWidth={1}   dot={false} strokeDasharray="4 2" connectNulls={false} />
+        <Line type="monotone" dataKey="10m avg" stroke="#9ecae1" strokeWidth={1}   dot={false} strokeDasharray="2 2" connectNulls={false} />
       </LineChart>
     </ResponsiveContainer>
   )

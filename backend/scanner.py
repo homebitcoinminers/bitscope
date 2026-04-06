@@ -65,7 +65,7 @@ def parse_snapshot(mac: str, data: dict, session_id: Optional[int] = None) -> Me
         power=data.get("power"), voltage=data.get("voltage"), current=data.get("current"),
         core_voltage=data.get("coreVoltage"), core_voltage_actual=data.get("coreVoltageActual"),
         frequency=data.get("frequency"), fan_rpm=data.get("fanrpm"), fan2_rpm=data.get("fan2rpm"),
-        fan_speed=data.get("fanspeed"), error_percentage=data.get("errorPercentage"),
+        fan_speed=data.get("fanspeed"), error_percentage=data.get("errorPercentage"),  # fanspeed = current RPM%, manualFanSpeed = set point
         shares_accepted=data.get("sharesAccepted"), shares_rejected=data.get("sharesRejected"),
         best_diff=best_diff, best_session_diff=data.get("bestSessionDiff"),
         uptime_seconds=data.get("uptimeSeconds"), wifi_rssi=data.get("wifiRSSI"),

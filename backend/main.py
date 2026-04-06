@@ -279,7 +279,32 @@ def get_metrics(
 
     q = q.order_by(MetricSnapshot.ts.asc())
     snapshots = db.exec(q).all()
-    return [_snapshot_dict(s) for s in snapshots]
+    rows = [_snapshot_dict(s) for s in snapshots]
+
+    # Insert null sentinel rows at edges of large gaps (> 3 minutes = device was offline)
+    # This makes Recharts render a visible gap rather than drawing a line across downtime
+    GAP_THRESHOLD_SECONDS = 180
+    result = []
+    for i, row in enumerate(rows):
+        if i > 0:
+            prev_ts = datetime.fromisoformat(rows[i-1]['ts'].replace('Z', '+00:00'))
+            curr_ts = datetime.fromisoformat(row['ts'].replace('Z', '+00:00'))
+            gap = (curr_ts - prev_ts).total_seconds()
+            if gap > GAP_THRESHOLD_SECONDS:
+                # Insert two null sentinels: one just after the last real point,
+                # one just before the next real point — creates a clean gap
+                sentinel_after  = prev_ts + timedelta(seconds=60)
+                sentinel_before = curr_ts  - timedelta(seconds=60)
+                null_row = {"ts": None, "hashrate": None, "temp": None, "power": None,
+                            "error_percentage": None, "hashrate_1m": None, "hashrate_10m": None,
+                            "hashrate_1h": None, "fan_rpm": None, "frequency": None,
+                            "core_voltage": None, "wifi_rssi": None, "duplicate_hw_nonces": None}
+                result.append({**null_row, "ts": sentinel_after.strftime("%Y-%m-%dT%H:%M:%SZ")})
+                if sentinel_before > sentinel_after:
+                    result.append({**null_row, "ts": sentinel_before.strftime("%Y-%m-%dT%H:%M:%SZ")})
+        result.append(row)
+
+    return result
 
 
 @app.get("/api/devices/{mac}/fanfields")
@@ -1105,14 +1130,11 @@ async def configure_system_fleet(body: dict, db: Session = Depends(get_session))
                 payload[f] = body[f]
         # Fan settings in system profile (if included)
         if "autofanspeed" in body:
-            if body["autofanspeed"]:
-                payload["autofanspeed"] = "Auto Fan Control (PID)"
-            else:
-                payload["autofanspeed"] = ""
+            payload["autofanspeed"] = 2 if body["autofanspeed"] else 0
         if "fanspeed" in body:
-            payload["fanspeed"] = int(body["fanspeed"])
+            payload["manualFanSpeed"] = int(body["fanspeed"])
         if "temptarget" in body:
-            payload["temptarget"] = int(body["temptarget"])
+            payload["pidTargetTemp"] = int(body["temptarget"])
         if not payload:
             results[mac] = {"ok": True, "skipped": True, "msg": "Nothing to apply"}
             return
@@ -1175,20 +1197,17 @@ async def configure_hardware(body: dict, db: Session = Depends(get_session)):
                 payload["frequency"] = int(body["frequency"])
             if body.get("coreVoltage"):
                 payload["coreVoltage"] = int(body["coreVoltage"])
-        # Fan settings always apply
-        # Fan control — AxeOS variants differ:
-        # Standard Bitaxe: autofanspeed=0/1 (integer)
-        # NerdQAxe++/NerdOCTAxe: autofanspeed="" (manual) or "Auto Fan Control (PID)" (auto)
-        # We send both the string and integer forms; the device will use whichever it understands
+        # Fan control — confirmed field names from device API:
+        # autofanspeed: 0 = manual, 2 = Auto Fan Control (PID)  [integer enum]
+        # manualFanSpeed: 0-100 fan speed when in manual mode   [NOT "fanspeed" — that is read-only]
+        # pidTargetTemp: PID target temperature                  [NOT "temptarget"]
+        # overheat_temp: shutdown temperature                    [correct]
         if "autofanspeed" in body:
-            if body["autofanspeed"]:
-                payload["autofanspeed"] = "Auto Fan Control (PID)"
-            else:
-                payload["autofanspeed"] = ""
+            payload["autofanspeed"] = 2 if body["autofanspeed"] else 0
         if "fanspeed" in body:
-            payload["fanspeed"] = int(body["fanspeed"])
+            payload["manualFanSpeed"] = int(body["fanspeed"])
         if "temptarget" in body:
-            payload["temptarget"] = int(body["temptarget"])
+            payload["pidTargetTemp"] = int(body["temptarget"])
         if "overheat_temp" in body:
             payload["overheat_temp"] = int(body["overheat_temp"])
 
