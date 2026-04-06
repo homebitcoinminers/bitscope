@@ -52,6 +52,7 @@ from models import (
 from scanner import scan_and_discover, poll_all_devices, upsert_device, fetch_device_info, get_discord_enabled, set_discord_enabled
 import nonce_tracker
 from nonce_tracker import get_nonce_stats, get_nonce_history, send_daily_digest
+import pool_monitor
 import profiles as profile_store
 import aiohttp
 
@@ -74,6 +75,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(poll_all_devices, "interval", seconds=poll_interval, id="poll")
     scheduler.add_job(scan_and_discover, "interval", seconds=scan_interval, id="scan")
     scheduler.add_job(_check_daily_digest, "interval", minutes=5, id="digest_check")
+    scheduler.add_job(_run_pool_monitor, "interval", minutes=5, id="pool_monitor")
     scheduler.start()
 
     # Initial scan on startup
@@ -479,6 +481,8 @@ _alert_types_enabled: dict = {
     "new_best_diff": True,
     "hw_nonce_rate": True,
     "hw_nonce_digest": True,
+    "pool_offline": True,
+    "pool_online": True,
 }
 
 
@@ -1242,6 +1246,93 @@ def configure_history(limit: int = 100, db: Session = Depends(get_session)):
         .order_by(AlertLog.ts.desc()).limit(limit)
     ).all()
     return logs
+
+
+# ── Pool Monitor ─────────────────────────────────────────────────────────────
+
+async def _run_pool_monitor():
+    from scanner import get_discord_enabled
+    await pool_monitor.check_all_pools(discord_enabled=get_discord_enabled())
+
+
+@app.get("/api/pools")
+def list_pool_monitors():
+    pools = pool_monitor.load_pools()
+    states = pool_monitor.get_all_states()
+    result = []
+    for p in pools:
+        key = pool_monitor.get_pool_key(p["host"], p["port"])
+        state = states.get(key, {})
+        result.append({**p, "state": state})
+    return result
+
+
+@app.post("/api/pools")
+def add_pool_monitor(body: dict):
+    pools = pool_monitor.load_pools()
+    new_pool = {
+        "id": body.get("id") or f"pool_{int(datetime.utcnow().timestamp())}",
+        "label": body.get("label", ""),
+        "host": body["host"],
+        "port": int(body["port"]),
+        "tls": bool(body.get("tls", False)),
+        "worker": body.get("worker", ""),
+        "enabled": True,
+    }
+    # Replace if same id
+    pools = [p for p in pools if p.get("id") != new_pool["id"]]
+    pools.append(new_pool)
+    pool_monitor.save_pools(pools)
+    return new_pool
+
+
+@app.delete("/api/pools/{pool_id}")
+def delete_pool_monitor(pool_id: str):
+    pools = pool_monitor.load_pools()
+    pools = [p for p in pools if p.get("id") != pool_id]
+    pool_monitor.save_pools(pools)
+    return {"ok": True}
+
+
+@app.patch("/api/pools/{pool_id}")
+def update_pool_monitor(pool_id: str, body: dict):
+    pools = pool_monitor.load_pools()
+    for p in pools:
+        if p.get("id") == pool_id:
+            p.update({k: v for k, v in body.items() if k in ("label","host","port","tls","worker","enabled")})
+            if "port" in body:
+                p["port"] = int(body["port"])
+    pool_monitor.save_pools(pools)
+    return {"ok": True}
+
+
+@app.post("/api/pools/{pool_id}/check")
+async def check_pool_now(pool_id: str):
+    """Immediately check a single pool."""
+    pools = pool_monitor.load_pools()
+    pool = next((p for p in pools if p.get("id") == pool_id), None)
+    if not pool:
+        raise HTTPException(404, "Pool not found")
+    result = await pool_monitor.stratum_check(
+        pool["host"], pool["port"],
+        worker=pool.get("worker", "bc1qcheck.bitscope"),
+        tls=pool.get("tls", False),
+    )
+    key = pool_monitor.get_pool_key(pool["host"], pool["port"])
+    pool_monitor._pool_states[key] = {**result, "label": pool.get("label", "")}
+    return result
+
+
+@app.post("/api/pools/check-custom")
+async def check_custom_pool(body: dict):
+    """Check a pool without saving it — for the pool checker tool."""
+    host = body["host"]
+    port = int(body["port"])
+    worker = body.get("worker", "bc1qcheck.bitscope")
+    tls = bool(body.get("tls", False))
+    timeout = float(body.get("timeout", 15.0))
+    result = await pool_monitor.stratum_check(host, port, worker=worker, tls=tls, timeout=timeout)
+    return result
 
 
 # ── Settings ──────────────────────────────────────────────────────────────────

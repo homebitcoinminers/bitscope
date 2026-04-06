@@ -1,5 +1,13 @@
 # BitScope Changelog
 
+## v0.6.0 — 2026-04-06
+
+### Added
+- **Pool Monitor page** — monitors stratum pools via full Stratum V1 handshake (subscribe + authorize), not just TCP ping. Shows RTT, difficulty, auth result, job received status. Auto-checks every 5 minutes. Discord alerts on pool going offline or coming back online. Multiple pools supported, each with label, host, port, TLS toggle, worker address.
+- **Pool Checker tool** (inspired by skot/pool_checkr) — on-demand stratum connection to any pool. Reports: RTT, whether your wallet address authorizes successfully, pool-set difficulty, whether a job was received, extranonce1, coinbase prefix decoded to human-readable text (often contains pool identity), and inference on payout type (solo pools set difficulty = full network difficulty, PPLNS pools set much lower).
+
+---
+
 ## v0.5.7 — 2026-04-06
 
 ### Fixed
