@@ -1,5 +1,13 @@
 # BitScope Changelog
 
+## v0.5.5 — 2026-04-05
+
+### Added (diagnostic)
+- **PATCH request/response logging** — every configure attempt now logs the exact JSON payload sent to the device and the exact response body. Visible in the Logs page. Use this to diagnose fan control issues.
+- **`/api/devices/{mac}/fanfields` debug endpoint** — returns all fan/temp related keys from the device's latest raw API snapshot. Hit from browser to see exactly what field names the device uses.
+
+---
+
 ## v0.5.4 — 2026-04-05
 
 ### Fixed

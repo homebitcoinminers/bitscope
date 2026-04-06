@@ -282,6 +282,23 @@ def get_metrics(
     return [_snapshot_dict(s) for s in snapshots]
 
 
+@app.get("/api/devices/{mac}/fanfields")
+def get_fan_fields(mac: str, db: Session = Depends(get_session)):
+    """Debug: show all fan/temp related raw fields from latest snapshot."""
+    mac = mac.upper()
+    snap = db.exec(
+        select(MetricSnapshot).where(MetricSnapshot.mac == mac)
+        .order_by(MetricSnapshot.ts.desc()).limit(1)
+    ).first()
+    if not snap or not snap.raw:
+        raise HTTPException(404, "No snapshot found")
+    raw = json.loads(snap.raw)
+    # Return all fields that look fan/temp related
+    fan_keys = {k: v for k, v in raw.items() 
+                if any(x in k.lower() for x in ['fan', 'temp', 'auto', 'pid', 'control', 'target', 'overheat', 'shutdown'])}
+    return {"mac": mac, "fan_fields": fan_keys, "all_keys": sorted(raw.keys())}
+
+
 @app.get("/api/devices/{mac}/raw/{snapshot_id}")
 def get_raw_snapshot(mac: str, snapshot_id: int, db: Session = Depends(get_session)):
     snap = db.get(MetricSnapshot, snapshot_id)
@@ -730,21 +747,27 @@ async def _check_daily_digest():
 
 async def _patch_device(ip: str, payload: dict) -> dict:
     """Send a PATCH request to a device's AxeOS API."""
+    logger.info(f"[configure] PATCH http://{ip}/api/system payload={json.dumps(payload)}")
     try:
         async with aiohttp.ClientSession() as http:
+            # Do NOT set Content-Type manually — aiohttp sets it correctly with json=
             async with http.patch(
                 f"http://{ip}/api/system",
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=10),
-                headers={"Host": ip, "Content-Type": "application/json"},
             ) as resp:
                 status = resp.status
                 try:
                     body = await resp.json(content_type=None)
                 except Exception:
-                    body = {}
+                    try:
+                        body = {"text": await resp.text()}
+                    except Exception:
+                        body = {}
+                logger.info(f"[configure] PATCH {ip} -> status={status} body={json.dumps(body)[:200]}")
                 return {"ok": status in (200, 204), "status": status, "body": body}
     except Exception as e:
+        logger.error(f"[configure] PATCH {ip} failed: {e}")
         return {"ok": False, "error": str(e)}
 
 
