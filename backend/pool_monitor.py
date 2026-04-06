@@ -115,8 +115,13 @@ async def stratum_check(host: str, port: int, worker: str = "bc1qcheck.bitscope"
             return result
 
         # Parse extranonce from subscribe response
-        if isinstance(sub_resp.get("result"), list) and len(sub_resp["result"]) >= 2:
-            result["extranonce"] = sub_resp["result"][1]  # extranonce1
+        # Result format: [[["mining.set_difficulty",id],["mining.notify",id]], extranonce1, extranonce2_size]
+        if isinstance(sub_resp.get("result"), list):
+            sr = sub_resp["result"]
+            if len(sr) >= 2:
+                result["extranonce"] = sr[1]  # extranonce1 hex
+            if len(sr) >= 3:
+                result["_en2_size"] = sr[2]   # extranonce2 byte size
 
         # Step 2: mining.authorize
         await send({
@@ -147,21 +152,24 @@ async def stratum_check(host: str, port: int, worker: str = "bc1qcheck.bitscope"
             # Check notify (job)
             if msg.get("method") == "mining.notify":
                 result["job_received"] = True
-                # Extract pool identity from coinbase if possible
                 params = msg.get("params", [])
-                if len(params) >= 3:
+                # params: [job_id, prev_hash, coinbase1, coinbase2, merkle_branches,
+                #          version, nbits, ntime, clean_jobs]
+                if len(params) >= 4:
+                    coinbase1 = params[2]
+                    coinbase2 = params[3]
+                    result["_coinbase1"] = coinbase1
+                    result["_coinbase2"] = coinbase2
                     try:
-                        coinbase_hex = params[2]  # coinbase1
-                        # Decode ASCII-printable parts of coinbase
-                        cb_bytes = bytes.fromhex(coinbase_hex)
+                        cb_bytes = bytes.fromhex(coinbase1)
                         cb_text = ''.join(chr(b) if 32 <= b < 127 else '.' for b in cb_bytes)
-                        # Common pool identifiers in coinbase
-                        for pool_tag in ['ckpool', 'public-pool', 'ocean', 'foundry', 
-                                          'antpool', 'f2pool', 'viabtc', 'binance', 'mara']:
+                        for pool_tag in ['ckpool', 'public-pool', 'ocean', 'foundry',
+                                          'antpool', 'f2pool', 'viabtc', 'binance', 'mara',
+                                          'slush', 'braiins', 'bitfury', 'btc.com', 'poolin']:
                             if pool_tag.lower() in cb_text.lower():
                                 result["pool_name"] = pool_tag
                                 break
-                        result["coinbase_text"] = cb_text[:80]
+                        result["coinbase_text"] = cb_text[:120]
                     except Exception:
                         pass
 
@@ -270,3 +278,203 @@ async def _send_pool_alert(pool: dict, result: dict, was_up: bool):
 
 def get_all_states() -> dict:
     return dict(_pool_states)
+
+
+# ── Coinbase decoder ──────────────────────────────────────────────────────────
+
+import struct as _struct
+
+def _varint(data: bytes, offset: int) -> tuple[int, int]:
+    b = data[offset]
+    if b < 0xfd: return b, offset + 1
+    elif b == 0xfd: return _struct.unpack_from('<H', data, offset+1)[0], offset + 3
+    elif b == 0xfe: return _struct.unpack_from('<I', data, offset+1)[0], offset + 5
+    else: return _struct.unpack_from('<Q', data, offset+1)[0], offset + 9
+
+
+def _decode_script(script: bytes) -> dict:
+    """Classify a scriptPubKey and extract its key material."""
+    if len(script) == 25 and script[0]==0x76 and script[1]==0xa9 and script[2]==0x14:
+        return {"type": "P2PKH", "desc": "Legacy (1…)", "hash160": script[3:23].hex()}
+    if len(script) == 22 and script[0]==0x00 and script[1]==0x14:
+        return {"type": "P2WPKH", "desc": "Native segwit (bc1q…)", "hash": script[2:].hex()}
+    if len(script) == 34 and script[0]==0x00 and script[1]==0x20:
+        return {"type": "P2WSH", "desc": "Segwit script hash (bc1q…)", "hash": script[2:].hex()}
+    if len(script) == 34 and script[0]==0x51 and script[1]==0x20:
+        return {"type": "P2TR", "desc": "Taproot (bc1p…)", "hash": script[2:].hex()}
+    if len(script) == 23 and script[0]==0xa9 and script[1]==0x14:
+        return {"type": "P2SH", "desc": "Script hash (3…)", "hash": script[2:22].hex()}
+    if script and script[0] == 0x6a:
+        try: text = script[2:].decode('utf-8', 'replace').replace('\x00','')
+        except: text = script.hex()
+        return {"type": "OP_RETURN", "desc": f"Data: {text[:80]}"}
+    return {"type": "unknown", "raw": script.hex()[:40]}
+
+
+def decode_coinbase_outputs(coinbase1: str, extranonce1: str, coinbase2: str,
+                             extranonce2_size: int = 4) -> list[dict]:
+    """
+    Reconstruct coinbase transaction from stratum params and decode output addresses.
+    
+    Args:
+        coinbase1: hex string (stratum notify params[2])
+        extranonce1: hex string assigned by pool on subscribe
+        coinbase2: hex string (stratum notify params[3])
+        extranonce2_size: bytes of extranonce2 (from subscribe response)
+    """
+    # Build extranonce2 placeholder (all zeros)
+    en2 = '00' * extranonce2_size
+    full_hex = coinbase1 + extranonce1 + en2 + coinbase2
+    try:
+        raw = bytes.fromhex(full_hex)
+    except Exception as e:
+        return [{"error": f"Invalid hex: {e}"}]
+
+    outputs = []
+    try:
+        offset = 0
+        offset += 4  # version
+        # Check for segwit marker/flag
+        if len(raw) > offset + 1 and raw[offset] == 0x00 and raw[offset+1] == 0x01:
+            offset += 2
+        in_count, offset = _varint(raw, offset)
+        for _ in range(in_count):
+            offset += 32  # prev hash
+            offset += 4   # prev index
+            script_len, offset = _varint(raw, offset)
+            offset += script_len
+            offset += 4   # sequence
+        out_count, offset = _varint(raw, offset)
+        for i in range(out_count):
+            value = _struct.unpack_from('<Q', raw, offset)[0]
+            offset += 8
+            script_len, offset = _varint(raw, offset)
+            script = raw[offset:offset+script_len]
+            offset += script_len
+            decoded = _decode_script(script)
+            outputs.append({
+                "index": i,
+                "value_sat": value,
+                "value_btc": round(value / 1e8, 8) if value > 0 else 0,
+                **decoded,
+            })
+    except Exception as e:
+        outputs.append({"error": str(e), "partial": True})
+    return outputs
+
+
+def infer_payout_type(difficulty: float | None, outputs: list[dict], 
+                       worker_address: str | None, authorized: bool | None) -> dict:
+    """
+    Infer pool payout type from stratum data.
+    Returns human-readable analysis.
+    """
+    result = {
+        "payout_type": "Unknown",
+        "is_solo": False,
+        "is_custodial": True,
+        "worker_in_coinbase": False,
+        "analysis": [],
+        "verdict": "",
+    }
+
+    notes = result["analysis"]
+
+    # Check difficulty
+    if difficulty is not None:
+        if difficulty > 1_000_000_000_000:
+            result["is_solo"] = True
+            result["payout_type"] = "SOLO"
+            notes.append(f"Difficulty {difficulty:,.0f} ≈ full network difficulty → SOLO pool. "
+                          "You only earn if your miner finds a full block.")
+        elif difficulty > 1_000_000:
+            notes.append(f"Difficulty {difficulty:,.0f} — high share difficulty, possibly SOLO or high-diff PPLNS.")
+        elif difficulty > 1_000:
+            result["payout_type"] = "PPLNS/FPPS"
+            notes.append(f"Difficulty {difficulty:,.0f} — typical pooled mining (PPLNS/FPPS). "
+                          "You earn proportional shares.")
+        else:
+            result["payout_type"] = "PPLNS/FPPS"
+            notes.append(f"Difficulty {difficulty:.1f} — low share difficulty, shared pool with frequent payouts.")
+
+    # Check coinbase outputs
+    if outputs and not any('error' in o for o in outputs):
+        for o in outputs:
+            otype = o.get("type", "")
+            odesc = o.get("desc", "")
+
+            # Check if worker address appears in the output hash (non-custodial solo)
+            if worker_address and o.get("hash"):
+                # For P2WPKH: the hash is the 20-byte pubkey hash
+                # A bc1q address encodes a pubkey hash — we can't easily reverse
+                # but we CAN note if there's only 1 output going to a non-pool address
+                pass
+
+            if otype == "OP_RETURN":
+                notes.append(f"Output {o['index']}: OP_RETURN data — {o.get('desc','')}")
+            elif value_btc := o.get("value_btc", 0):
+                notes.append(f"Output {o['index']}: {o['value_btc']} BTC → {otype} ({odesc})")
+            else:
+                notes.append(f"Output {o['index']}: (template value=0, will be set at solve time) → {otype} ({odesc})")
+
+        # Solo non-custodial: single output going directly to miner
+        non_op_return = [o for o in outputs if o.get("type") != "OP_RETURN"]
+        if len(non_op_return) == 1 and result["is_solo"]:
+            result["is_custodial"] = False
+            notes.append("✅ Single coinbase output — consistent with non-custodial solo pool "
+                          "(reward goes directly to your address if you find a block).")
+        elif len(non_op_return) > 1 and result["is_solo"]:
+            result["is_custodial"] = True
+            notes.append(f"⚠️ {len(non_op_return)} coinbase outputs — pool takes a fee cut. "
+                          "Not fully non-custodial.")
+
+    # Auth result
+    if authorized is True:
+        notes.append("✅ Authorization accepted — this pool accepts your wallet address as a worker name.")
+    elif authorized is False:
+        notes.append("❌ Authorization rejected — this pool may require account registration, "
+                      "or your address format is not supported.")
+    elif authorized is None:
+        notes.append("⚠️ No auth response received — pool may not require auth (some solo pools skip it).")
+
+    # Build verdict
+    if result["payout_type"] == "SOLO" and not result["is_custodial"]:
+        result["verdict"] = "Non-custodial SOLO pool — you keep 100% of any block you find, paid directly to your address."
+    elif result["payout_type"] == "SOLO" and result["is_custodial"]:
+        result["verdict"] = "Custodial SOLO pool — pool holds rewards and pays out. Verify fee structure on pool website."
+    elif result["payout_type"] == "PPLNS/FPPS":
+        result["verdict"] = "Shared pooled mining — frequent proportional payouts based on shares submitted."
+    else:
+        result["verdict"] = "Could not determine payout type — check pool website for details."
+
+    return result
+
+
+async def stratum_check_full(host: str, port: int, worker: str = "bc1qcheck.bitscope",
+                              password: str = "x", tls: bool = False, timeout: float = 20.0) -> dict:
+    """
+    Extended stratum check that also decodes coinbase outputs and infers payout type.
+    """
+    result = await stratum_check(host, port, worker=worker, password=password, tls=tls, timeout=timeout)
+    
+    if result.get("ok") and result.get("_coinbase1") and result.get("_coinbase2"):
+        outputs = decode_coinbase_outputs(
+            result["_coinbase1"],
+            result.get("extranonce", ""),
+            result["_coinbase2"],
+            result.get("_en2_size", 4),
+        )
+        result["coinbase_outputs"] = outputs
+        payout = infer_payout_type(
+            result.get("difficulty"),
+            outputs,
+            worker,
+            result.get("authorized"),
+        )
+        result["payout_analysis"] = payout
+        # Clean up internal fields
+        del result["_coinbase1"]
+        del result["_coinbase2"]
+        if "_en2_size" in result: del result["_en2_size"]
+    
+    return result

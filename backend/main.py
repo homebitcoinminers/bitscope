@@ -1325,14 +1325,27 @@ async def check_pool_now(pool_id: str):
 
 @app.post("/api/pools/check-custom")
 async def check_custom_pool(body: dict):
-    """Check a pool without saving it — for the pool checker tool."""
+    """Check a pool without saving it — full stratum check with coinbase decoding and payout analysis."""
     host = body["host"]
     port = int(body["port"])
     worker = body.get("worker", "bc1qcheck.bitscope")
     tls = bool(body.get("tls", False))
-    timeout = float(body.get("timeout", 15.0))
-    result = await pool_monitor.stratum_check(host, port, worker=worker, tls=tls, timeout=timeout)
+    timeout = float(body.get("timeout", 20.0))
+    result = await pool_monitor.stratum_check_full(host, port, worker=worker, tls=tls, timeout=timeout)
     return result
+
+
+@app.get("/api/pools/query-api")
+async def query_pool_api(url: str):
+    """Proxy a GET request to a pool's REST API (CORS bypass)."""
+    try:
+        async with aiohttp.ClientSession() as http:
+            async with http.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.content_type and 'json' in resp.content_type:
+                    return await resp.json(content_type=None)
+                return {"text": await resp.text(), "status": resp.status}
+    except Exception as e:
+        raise HTTPException(502, str(e))
 
 
 # ── Settings ──────────────────────────────────────────────────────────────────

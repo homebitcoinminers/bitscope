@@ -50,42 +50,101 @@ function CheckResult({ result }) {
   const theme = useTheme()
   if (!result) return null
 
-  const rttColor = result.rtt_ms < 50 ? '#639922' : result.rtt_ms < 150 ? '#854f0b' : '#a32d2d'
+  const rttColor = !result.rtt_ms ? '#888' : result.rtt_ms < 50 ? '#639922' : result.rtt_ms < 150 ? '#854f0b' : '#a32d2d'
+  const payout = result.payout_analysis || {}
+
+  const verdictColor = payout.payout_type === 'SOLO' && !payout.is_custodial ? '#639922'
+    : payout.payout_type === 'SOLO' ? '#854f0b'
+    : payout.payout_type === 'PPLNS/FPPS' ? '#185fa5'
+    : '#888'
 
   return (
-    <div style={{ marginTop: 12, padding: 14, borderRadius: 8, background: theme.statBg, border: `0.5px solid ${result.ok ? '#639922' : '#e24b4a'}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+    <div style={{ marginTop: 12 }}>
+      {/* Status banner */}
+      <div style={{ padding: '10px 14px', borderRadius: 8, background: result.ok ? '#eaf3de' : '#fcebeb', border: `0.5px solid ${result.ok ? '#639922' : '#e24b4a'}`, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
         <StatusDot ok={result.ok} />
-        <span style={{ fontWeight: 500, fontSize: 13, color: result.ok ? '#639922' : '#e24b4a' }}>
-          {result.ok ? 'Pool is online' : 'Pool is offline / unreachable'}
+        <span style={{ fontWeight: 500, fontSize: 13, color: result.ok ? '#3b6d11' : '#a32d2d' }}>
+          {result.ok ? 'Pool is online and responding' : `Pool offline: ${result.error || 'Connection failed'}`}
         </span>
+        {result.rtt_ms && <span style={{ fontSize: 11, color: rttColor, marginLeft: 'auto' }}>{result.rtt_ms}ms RTT</span>}
       </div>
 
-      {result.ok ? (
-        <div>
-          <PoolField label="RTT (connect → subscribe)" value={result.rtt_ms != null ? <span style={{ color: rttColor, fontWeight: 500 }}>{result.rtt_ms}ms</span> : '—'} />
-          <PoolField label="Authorization" value={result.authorized === true ? '✅ Accepted' : result.authorized === false ? '❌ Rejected' : '⏳ No response'} />
-          <PoolField label="Pool difficulty" value={result.difficulty != null ? result.difficulty.toLocaleString() : '—'} />
-          <PoolField label="Job received" value={result.job_received ? '✅ Yes' : '⏳ Not yet'} />
-          <PoolField label="Extranonce1" value={result.extranonce} mono />
-          {result.pool_name && <PoolField label="Pool identity" value={result.pool_name} />}
-          {result.coinbase_text && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 11, color: theme.muted, marginBottom: 3 }}>Coinbase prefix (decoded):</div>
-              <div style={{ fontFamily: 'monospace', fontSize: 10, color: theme.text, background: theme.cardBg, padding: '6px 8px', borderRadius: 5, overflowX: 'auto', whiteSpace: 'nowrap' }}>
-                {result.coinbase_text}
+      {result.ok && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {/* Stratum details */}
+          <div style={{ background: theme.statBg, borderRadius: 8, padding: 14 }}>
+            <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10 }}>📡 Stratum response</div>
+            <PoolField label="Authorization" value={result.authorized === true ? '✅ Accepted — your address works' : result.authorized === false ? '❌ Rejected — may need registration' : '⚠️ No auth response'} />
+            <PoolField label="Difficulty set" value={result.difficulty != null ? result.difficulty.toLocaleString() : '—'} />
+            <PoolField label="Job received" value={result.job_received ? '✅ Yes — pool is issuing work' : '⏳ Not received in time'} />
+            <PoolField label="Extranonce1" value={result.extranonce || '—'} mono />
+            {result.pool_name && <PoolField label="Pool identity" value={`✓ ${result.pool_name}`} />}
+            {result.coinbase_text && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 11, color: theme.muted, marginBottom: 3 }}>Coinbase script text:</div>
+                <div style={{ fontFamily: 'monospace', fontSize: 10, color: theme.text, background: theme.cardBg, padding: '5px 8px', borderRadius: 5, overflowX: 'auto', whiteSpace: 'nowrap', wordBreak: 'break-all' }}>
+                  {result.coinbase_text}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+
+          {/* Payout analysis */}
+          <div style={{ background: theme.statBg, borderRadius: 8, padding: 14 }}>
+            <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 6 }}>💰 Payout analysis</div>
+            {payout.payout_type ? (
+              <>
+                <div style={{ padding: '8px 10px', borderRadius: 6, background: `${verdictColor}18`, border: `0.5px solid ${verdictColor}`, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 500, color: verdictColor, fontSize: 12 }}>{payout.payout_type}</div>
+                  <div style={{ fontSize: 11, color: theme.text, marginTop: 3 }}>{payout.verdict}</div>
+                </div>
+                {payout.analysis?.map((note, i) => (
+                  <div key={i} style={{ fontSize: 11, color: theme.muted, padding: '3px 0', borderBottom: `0.5px solid ${theme.border}`, lineHeight: 1.5 }}>{note}</div>
+                ))}
+              </>
+            ) : (
+              <div style={{ fontSize: 12, color: theme.faint }}>No payout data available</div>
+            )}
+          </div>
         </div>
-      ) : (
-        <div style={{ fontSize: 12, color: '#a32d2d' }}>
-          Error: {result.error || 'Connection failed'}
+      )}
+
+      {/* Coinbase outputs */}
+      {result.coinbase_outputs?.length > 0 && (
+        <div style={{ marginTop: 12, background: theme.statBg, borderRadius: 8, padding: 14 }}>
+          <div style={{ fontWeight: 500, fontSize: 12, color: theme.text, marginBottom: 10 }}>
+            🔗 Coinbase outputs ({result.coinbase_outputs.length})
+            <span style={{ fontWeight: 400, color: theme.muted, fontSize: 11, marginLeft: 8 }}>
+              Who would receive the block reward
+            </span>
+          </div>
+          {result.coinbase_outputs.map((o, i) => (
+            o.error ? (
+              <div key={i} style={{ fontSize: 11, color: '#a32d2d' }}>Decode error: {o.error}</div>
+            ) : (
+              <div key={i} style={{ padding: '8px 0', borderBottom: `0.5px solid ${theme.border}`, fontSize: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontWeight: 500, color: theme.text }}>Output {o.index}: {o.type}</span>
+                  <span style={{ color: theme.muted }}>{o.value_btc > 0 ? `${o.value_btc} BTC` : '(template — set at solve time)'}</span>
+                </div>
+                <div style={{ fontSize: 11, color: theme.muted }}>{o.desc}</div>
+                {o.hash && (
+                  <div style={{ fontFamily: 'monospace', fontSize: 10, color: theme.faint, marginTop: 2 }}>
+                    Hash: {o.hash}
+                  </div>
+                )}
+              </div>
+            )
+          ))}
+          <div style={{ fontSize: 11, color: theme.faint, marginTop: 8 }}>
+            Note: Template outputs show value=0 (actual reward is set when a block is found).
+            The address type and hash reveal who the pool would pay.
+          </div>
         </div>
       )}
 
       {result.ts && (
-        <div style={{ fontSize: 10, color: theme.faint, marginTop: 8 }}>
+        <div style={{ fontSize: 10, color: theme.faint, marginTop: 8, textAlign: 'right' }}>
           Checked: {new Date(result.ts).toLocaleString()}
         </div>
       )}

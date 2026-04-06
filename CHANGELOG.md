@@ -1,5 +1,19 @@
 # BitScope Changelog
 
+## v0.6.1 — 2026-04-06
+
+### Added
+- **Coinbase transaction decoder** — the pool checker now decodes the raw coinbase transaction from `mining.notify` to reveal exactly who receives block rewards
+- **Payout type analysis** — infers from stratum data whether a pool is SOLO, PPLNS, or FPPS:
+  - Difficulty > 1 trillion → SOLO (full network difficulty = only pays on block find)
+  - Single coinbase output → non-custodial (reward goes directly to miner's address on block find)
+  - Multiple outputs → pool takes a fee cut, custodial arrangement
+  - Auth result interpretation — whether your wallet address format is accepted
+- **Coinbase output display** — shows each output's address type (P2WPKH/P2TR/P2SH/OP_RETURN), hash, and value for the block template
+- **Pool REST API proxy** — `/api/pools/query-api?url=` proxies GET requests to pool REST APIs to bypass browser CORS restrictions
+
+---
+
 ## v0.6.0 — 2026-04-06
 
 ### Added
