@@ -1,5 +1,18 @@
 # BitScope Changelog
 
+## v0.5.7 — 2026-04-06
+
+### Fixed
+- **Configure: offline devices now blocked** — offline devices and devices with no known IP are greyed out and their checkboxes disabled. Quick-select buttons (Online/All/model) only select devices that are reachable. Previously offline devices could be selected and would produce connection errors on apply.
+- **Configure: selection cleared on tab switch** — switching between Pool/System/Hardware now clears the device selection, requiring a conscious re-selection. Prevents accidentally applying the wrong profile type to previously selected devices.
+- **Configure: full IP shown** — device selector shows full IP address (e.g. `192.168.60.211`) instead of last two octets, making it easier to identify devices.
+- **Timezone toggle now works live** — changing Local/UTC in the sidebar now immediately re-renders chart timestamps and X axis tick labels. Previously the toggle updated the preference but charts only reflected it on next full page navigation.
+- **Chart timestamps respect timezone** — all chart X axis ticks and tooltip timestamps now use the selected timezone. Previously hardcoded to local browser time regardless of toggle state.
+- **Log timestamps respect timezone** — Logs page now shows timestamps in the selected timezone with the timezone name displayed in the footer.
+- **Chart colors respect dark/grey theme** — chart grid lines, axis labels, and tooltip now use theme colors instead of hardcoded light-mode colors.
+
+---
+
 ## v0.5.6 — 2026-04-06
 
 ### Fixed

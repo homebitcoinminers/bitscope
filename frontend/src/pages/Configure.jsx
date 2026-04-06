@@ -93,12 +93,12 @@ function DeviceSelector({ devices, selected, onChange, filterModel, isOnline }) 
   const byModel = {}
   devices.forEach(d => { const m = d.model || 'Unknown'; if (!byModel[m]) byModel[m] = []; byModel[m].push(d) })
 
-  const selectOnline = () => onChange(new Set(devices.filter(d => isOnline(d) && (!filterModel || d.model === filterModel)).map(d => d.mac)))
-  const selectAll = () => onChange(new Set(devices.filter(d => !filterModel || d.model === filterModel).map(d => d.mac)))
+  const selectOnline = () => onChange(new Set(devices.filter(d => isOnline(d) && d.last_ip && (!filterModel || d.model === filterModel)).map(d => d.mac)))
+  const selectAll = () => onChange(new Set(devices.filter(d => isOnline(d) && d.last_ip && (!filterModel || d.model === filterModel)).map(d => d.mac)))
   const selectNone = () => onChange(new Set())
-  const selectModel = (model) => onChange(new Set(devices.filter(d => d.model === model).map(d => d.mac)))
+  const selectModel = (model) => onChange(new Set(devices.filter(d => d.model === model && isOnline(d) && d.last_ip).map(d => d.mac)))
 
-  const lastTwoOctets = ip => { if (!ip) return '—'; const parts = ip.split('.'); return parts.slice(-2).join('.') }
+  // Show full IP — more useful for identifying devices
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', background: theme.cardBg, border: `0.5px solid ${theme.border}`, borderRadius: 10, overflow: 'hidden' }}>
@@ -124,27 +124,28 @@ function DeviceSelector({ devices, selected, onChange, filterModel, isOnline }) 
             {devs.map(d => {
               const online = isOnline(d)
               const checked = selected.has(d.mac)
-              const locked = filterModel && d.model !== filterModel
+              const modelLocked = filterModel && d.model !== filterModel
               const hasIp = !!d.last_ip
+              const disabled = modelLocked || !online || !hasIp
               return (
-                <label key={d.mac} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', cursor: locked ? 'not-allowed' : 'pointer', opacity: locked ? 0.35 : 1, borderBottom: `0.5px solid ${theme.border}`, background: checked ? `${theme.accent}12` : 'transparent' }}>
-                  <input type="checkbox" checked={checked} disabled={locked} onChange={() => {
-                    if (locked) return
+                <label key={d.mac} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.35 : 1, borderBottom: `0.5px solid ${theme.border}`, background: checked ? `${theme.accent}12` : 'transparent' }}>
+                  <input type="checkbox" checked={checked} disabled={disabled} onChange={() => {
+                    if (disabled) return
                     const next = new Set(selected)
                     checked ? next.delete(d.mac) : next.add(d.mac)
                     onChange(next)
-                  }} style={{ cursor: locked ? 'not-allowed' : 'pointer', flexShrink: 0 }} />
+                  }} style={{ cursor: disabled ? 'not-allowed' : 'pointer', flexShrink: 0 }} />
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: online ? '#639922' : theme.faint, display: 'inline-block', flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {d.label || d.hostname || d.mac}
                     </div>
                     <div style={{ fontSize: 10, color: hasIp ? theme.muted : theme.faint, fontFamily: 'monospace' }}>
-                      {hasIp ? lastTwoOctets(d.last_ip) : 'no IP'}
-                      <span style={{ color: theme.faint }}> · {d.mac.slice(-5)}</span>
+                      {hasIp ? d.last_ip : 'no IP'}
                     </div>
                   </div>
-                  {!hasIp && <span title="No IP — cannot configure" style={{ fontSize: 10, color: '#9a6700' }}>⚠</span>}
+                  {!online && <span title="Device offline" style={{ fontSize: 10, color: theme.faint }}>offline</span>}
+                  {online && !hasIp && <span title="No IP known" style={{ fontSize: 10, color: '#9a6700' }}>⚠ no IP</span>}
                 </label>
               )
             })}
@@ -309,7 +310,7 @@ export default function Configure() {
         model_lock: p.model_lock ?? prev.model_lock,
       }))
       if (p.model_lock) {
-        setSelected(new Set(devices.filter(d => d.model === p.model_lock && d.last_ip).map(d => d.mac)))
+        setSelected(new Set(devices.filter(d => d.model === p.model_lock && d.last_ip && isOnline(d)).map(d => d.mac)))
       }
     }
   }
@@ -386,8 +387,15 @@ export default function Configure() {
     api.configureHistory().then(setHistory).catch(() => {})
   }
 
+  const changeTab = (key) => {
+    setTab(key)
+    setStep('edit')
+    setResult(null)
+    setSelected(new Set())  // clear selection on tab change — user must consciously pick devices
+  }
+
   const tabBtn = (key, label, icon) => (
-    <button key={key} onClick={() => { setTab(key); setStep('edit'); setResult(null) }} style={{
+    <button key={key} onClick={() => changeTab(key)} style={{
       display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', width: '100%',
       textAlign: 'left', border: 'none', borderRadius: 6, marginBottom: 2,
       background: tab === key ? `${theme.accent}18` : 'transparent',
@@ -504,7 +512,7 @@ export default function Configure() {
                     <select value={hw.model_lock || ''} onChange={e => {
                       const m = e.target.value || null
                       setHw(h => ({ ...h, model_lock: m }))
-                      if (m) setSelected(new Set(devices.filter(d => d.model === m && d.last_ip).map(d => d.mac)))
+                      if (m) setSelected(new Set(devices.filter(d => d.model === m && d.last_ip && isOnline(d)).map(d => d.mac)))
                     }} style={{ width: '100%', border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '6px 10px', fontSize: 12, background: theme.inputBg, color: theme.text }}>
                       <option value="">No lock (any model)</option>
                       {[...new Set(devices.map(d => d.model).filter(Boolean))].map(m => <option key={m} value={m}>{m}</option>)}

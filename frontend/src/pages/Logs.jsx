@@ -92,7 +92,9 @@ export default function Logs() {
                   borderRadius: 3,
                   borderBottom: `0.5px solid ${theme.border}22`,
                 }}>
-                  <span style={{ color: theme.faint, flexShrink: 0, fontSize: 11 }}>{l.ts.slice(11, 19)}</span>
+                  <span style={{ color: theme.faint, flexShrink: 0, fontSize: 11 }}>
+                {new Date(l.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: window.__bsTz === 'UTC' ? 'UTC' : undefined })}
+              </span>
                   <span style={{
                     color: colors.text, flexShrink: 0, fontWeight: 500,
                     minWidth: 60, fontSize: 11,
@@ -107,7 +109,7 @@ export default function Logs() {
         )}
 
         <div style={{ fontSize: 11, color: theme.faint, marginTop: 8, textAlign: 'right' }}>
-          {filtered.length} entries · last 300 lines · refreshes every 5s
+          {filtered.length} entries · last 300 lines · {window.__bsTz === 'UTC' ? 'UTC' : Intl.DateTimeFormat().resolvedOptions().timeZone} · refreshes every 5s
         </div>
       </div>
     </PageWrap>
