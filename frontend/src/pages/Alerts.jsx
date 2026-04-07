@@ -147,7 +147,7 @@ export default function Alerts() {
           </Card>
         )}
 
-        {/* Alert log */}}
+        {/* Alert log */}
         {loading ? (
           <div style={{ color: theme.muted, padding: '2rem' }}>Loading…</div>
         ) : filtered.length === 0 ? (
