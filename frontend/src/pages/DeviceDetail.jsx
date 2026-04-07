@@ -42,6 +42,7 @@ export default function DeviceDetail() {
   const [nonceStats, setNonceStats] = useState(null)
   const [nonceHistory, setNonceHistory] = useState([])
   const [nonceRange, setNonceRange] = useState(24)
+  const [deviceAlerts, setDeviceAlerts] = useState([])
 
   const loadDeviceAlerts = useCallback(async () => {
     api.deviceAlerts(mac, 30).then(setDeviceAlerts).catch(() => {})
