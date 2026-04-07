@@ -77,6 +77,8 @@ export const api = {
   // Legacy per-device endpoints (kept for identify/restart)
   configureTuning: (mac, body) => req('POST', `/devices/${mac}/configure/tuning`, body),
 
+  deviceAlerts: (mac, limit = 50) => req('GET', `/devices/${mac}/alerts?limit=${limit}`),
+
   // Hardware snapshots
   snapshots: () => req('GET', '/snapshots'),
   deviceSnapshots: (mac) => req('GET', `/devices/${mac}/snapshots`),

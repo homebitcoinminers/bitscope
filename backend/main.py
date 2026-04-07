@@ -501,8 +501,21 @@ def set_alert_settings(body: dict):
 # ── Alerts ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/alerts")
-def list_alerts(limit: int = 100, db: Session = Depends(get_session)):
-    alerts = db.exec(select(AlertLog).order_by(AlertLog.ts.desc()).limit(limit)).all()
+def list_alerts(limit: int = 100, mac: str = None, db: Session = Depends(get_session)):
+    q = select(AlertLog).order_by(AlertLog.ts.desc())
+    if mac:
+        q = q.where(AlertLog.mac == mac.upper())
+    q = q.limit(limit)
+    return db.exec(q).all()
+
+
+@app.get("/api/devices/{mac}/alerts")
+def device_alerts(mac: str, limit: int = 50, db: Session = Depends(get_session)):
+    mac = mac.upper()
+    alerts = db.exec(
+        select(AlertLog).where(AlertLog.mac == mac)
+        .order_by(AlertLog.ts.desc()).limit(limit)
+    ).all()
     return alerts
 
 

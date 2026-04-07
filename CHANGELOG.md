@@ -1,5 +1,13 @@
 # BitScope Changelog
 
+## v0.6.5 — 2026-04-07
+
+### Added
+- **Per-device activity log** — each device detail page now has a collapsible Activity log panel showing all alerts and events for that device: offline/online transitions, temperature/fan/power/error breaches, hardware configure applies, new device discovery. Shows 5 most recent by default, expandable to see all. Respects timezone setting. Auto-refreshes every 30s with the rest of the page.
+- **`/api/devices/{mac}/alerts` endpoint** — returns alerts filtered to a single device MAC. Also updated `/api/alerts` to accept an optional `?mac=` query parameter.
+
+---
+
 ## v0.6.4 — 2026-04-07
 
 ### Added

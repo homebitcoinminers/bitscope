@@ -43,6 +43,10 @@ export default function DeviceDetail() {
   const [nonceHistory, setNonceHistory] = useState([])
   const [nonceRange, setNonceRange] = useState(24)
 
+  const loadDeviceAlerts = useCallback(async () => {
+    api.deviceAlerts(mac, 30).then(setDeviceAlerts).catch(() => {})
+  }, [mac])
+
   const loadDevice = useCallback(async () => {
     const [d, all] = await Promise.all([api.device(mac), api.thresholds()])
     setDevice(d)
@@ -73,12 +77,13 @@ export default function DeviceDetail() {
 
   useEffect(() => { loadDevice() }, [loadDevice])
   useEffect(() => { loadMetrics() }, [loadMetrics])
+  useEffect(() => { loadDeviceAlerts() }, [loadDeviceAlerts])
 
   useEffect(() => {
     api.deviceNonceHistory(mac, nonceRange).then(setNonceHistory).catch(() => {})
   }, [mac, nonceRange])
   useEffect(() => {
-    const t = setInterval(() => { loadDevice(); loadMetrics() }, 30000)
+    const t = setInterval(() => { loadDevice(); loadMetrics(); loadDeviceAlerts() }, 30000)
     return () => clearInterval(t)
   }, [loadDevice, loadMetrics])
 
@@ -420,6 +425,9 @@ export default function DeviceDetail() {
               </div>
             )}
           </Card>
+
+          {/* Device activity log */}
+          <DeviceLogPanel alerts={deviceAlerts} />
 
           {/* Notes */}
           <Card>
