@@ -30,6 +30,34 @@ function fmtTs(ts, full = false) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: tz })
 }
 
+// Range-aware tick formatter: adapts label based on how much time the chart spans
+function makeTickFmt(data) {
+  if (!data?.length) return ts => fmtTs(ts)
+  const realPts = data.filter(d => d.ts)
+  if (realPts.length < 2) return ts => fmtTs(ts)
+  const first = new Date(realPts[0].ts)
+  const last  = new Date(realPts[realPts.length - 1].ts)
+  const spanHours = (last - first) / 3600000
+  const tz = window.__bsTz === 'UTC' ? 'UTC' : undefined
+  return (ts) => {
+    if (!ts) return ''
+    const d = new Date(ts)
+    if (spanHours <= 2) {
+      // < 2h: show HH:mm:ss
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: tz })
+    } else if (spanHours <= 36) {
+      // < 36h: show HH:mm
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: tz })
+    } else if (spanHours <= 168) {
+      // < 7d: show "Mon 14:00"
+      return d.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: tz })
+    } else {
+      // > 7d: show "Apr 7"
+      return d.toLocaleString([], { month: 'short', day: 'numeric', timeZone: tz })
+    }
+  }
+}
+
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length || !label) return null
   const theme = window.__bsTheme || {}
@@ -79,9 +107,9 @@ export function MetricChart({ data, metric, label, unit = '', threshold, color, 
         <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor()} vertical={false} />
         <XAxis
           dataKey="ts"
-          tickFormatter={ts => ts ? fmtTs(ts) : ''}
+          tickFormatter={makeTickFmt(chartData)}
           tick={{ fontSize: 10, fill: chartAxisColor() }}
-          axisLine={false} tickLine={false} minTickGap={40}
+          axisLine={false} tickLine={false} minTickGap={50}
         />
         <YAxis
           tick={{ fontSize: 10, fill: chartAxisColor() }}
@@ -122,7 +150,7 @@ export function HashrateChart({ data, height = 140 }) {
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor()} vertical={false} />
-        <XAxis dataKey="ts" tickFormatter={ts => ts ? fmtTs(ts) : ''} tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} minTickGap={40} />
+        <XAxis dataKey="ts" tickFormatter={makeTickFmt(chartData)} tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} minTickGap={50} />
         <YAxis tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} width={44} tickFormatter={v => `${v.toFixed(1)} TH`} />
         <Tooltip content={<CustomTooltip />} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -170,7 +198,7 @@ export function TempChart({ data, threshold, height = 130 }) {
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor()} vertical={false} />
-        <XAxis dataKey="ts" tickFormatter={ts => ts ? fmtTs(ts) : ''} tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} minTickGap={40} />
+        <XAxis dataKey="ts" tickFormatter={makeTickFmt(chartData)} tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} minTickGap={50} />
         <YAxis tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} width={34} tickFormatter={v => `${v.toFixed(0)}°`} />
         <Tooltip content={<CustomTooltip />} />
         {threshold && <ReferenceLine y={threshold} stroke="#e24b4a" strokeDasharray="4 3" strokeWidth={1}
@@ -197,7 +225,7 @@ export function FanChart({ data, threshold, height = 100 }) {
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor()} vertical={false} />
-        <XAxis dataKey="ts" tickFormatter={ts => ts ? fmtTs(ts) : ''} tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} minTickGap={40} />
+        <XAxis dataKey="ts" tickFormatter={makeTickFmt(chartData)} tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} minTickGap={50} />
         <YAxis tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} width={44} tickFormatter={v => `${v.toFixed(0)}`} />
         <Tooltip content={<CustomTooltip />} />
         {threshold && <ReferenceLine y={threshold} stroke="#e24b4a" strokeDasharray="4 3" strokeWidth={1}
