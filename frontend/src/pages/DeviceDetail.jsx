@@ -748,3 +748,90 @@ function NoncePanel({ stats, history, range, onRangeChange, mac }) {
     </Card>
   )
 }
+
+function DeviceLogPanel({ alerts }) {
+  const theme = useTheme()
+  const [expanded, setExpanded] = useState(false)
+
+  const typeColor = (type) => {
+    if (['overheat','asic_overheat','vr_overheat','hw_nonce'].includes(type)) return '#e24b4a'
+    if (['error_rate','power_over_spec','fan_failure','weak_wifi'].includes(type)) return '#ef9f27'
+    if (type === 'offline') return '#888'
+    if (type === 'online') return '#639922'
+    if (type === 'new_device') return '#185fa5'
+    if (type === 'configure_apply') return '#9333ea'
+    return '#888'
+  }
+
+  const typeIcon = (type) => {
+    if (['overheat','asic_overheat','vr_overheat'].includes(type)) return '🌡️'
+    if (type === 'hw_nonce') return '⚠️'
+    if (type === 'error_rate') return '📊'
+    if (type === 'power_over_spec') return '⚡'
+    if (type === 'fan_failure') return '🌀'
+    if (type === 'weak_wifi') return '📶'
+    if (type === 'offline') return '🔴'
+    if (type === 'online') return '🟢'
+    if (type === 'new_device') return '✨'
+    if (type === 'configure_apply') return '⚙️'
+    return '📋'
+  }
+
+  const shown = expanded ? alerts : alerts.slice(0, 5)
+
+  return (
+    <div style={{ border: `0.5px solid ${theme.border}`, borderRadius: 10, background: theme.cardBg, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: alerts.length ? `0.5px solid ${theme.border}` : 'none', cursor: 'pointer' }}
+        onClick={() => setExpanded(e => !e)}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 500, color: theme.text }}>Activity log</span>
+          {alerts.length > 0 && (
+            <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 10, background: theme.statBg, color: theme.muted }}>{alerts.length}</span>
+          )}
+        </div>
+        <span style={{ fontSize: 12, color: theme.faint }}>{expanded ? '▲' : '▼'}</span>
+      </div>
+
+      {alerts.length === 0 ? (
+        <div style={{ padding: '10px 14px', fontSize: 12, color: theme.faint }}>No activity logged for this device yet.</div>
+      ) : (
+        <div>
+          {shown.map((a, i) => (
+            <div key={a.id} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: '7px 14px',
+              borderBottom: i < shown.length - 1 ? `0.5px solid ${theme.border}` : 'none',
+              background: i % 2 === 0 ? 'transparent' : `${theme.statBg}88`,
+            }}>
+              <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>{typeIcon(a.alert_type)}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: theme.text, lineHeight: 1.4 }}>{a.message}</div>
+                {a.value && a.threshold && (
+                  <div style={{ fontSize: 11, color: theme.faint, marginTop: 2 }}>
+                    {a.value} → threshold {a.threshold}
+                  </div>
+                )}
+              </div>
+              <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                <div style={{ fontSize: 10, color: theme.faint, whiteSpace: 'nowrap' }}>
+                  {new Date(a.ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: window.__bsTz === 'UTC' ? 'UTC' : undefined })}
+                </div>
+                <div style={{ fontSize: 10, color: typeColor(a.alert_type), fontWeight: 500, marginTop: 2 }}>
+                  {a.alert_type.replace(/_/g, ' ')}
+                </div>
+              </div>
+            </div>
+          ))}
+          {alerts.length > 5 && (
+            <div style={{ padding: '7px 14px', textAlign: 'center' }}>
+              <button onClick={e => { e.stopPropagation(); setExpanded(ex => !ex) }}
+                style={{ fontSize: 11, color: theme.accent, background: 'none', border: 'none', cursor: 'pointer' }}>
+                {expanded ? 'Show less' : `Show all ${alerts.length} entries`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
