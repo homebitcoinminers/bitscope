@@ -1,5 +1,18 @@
 # BitScope Changelog
 
+## v0.6.4 — 2026-04-07
+
+### Added
+- **VR temp on temperature graph** — device detail temperature chart now shows both chip temp (orange) and VR temp (coral dashed) on the same axes, with the threshold reference line applying to chip temp
+- **Fan RPM graph** — new Fan RPM chart below the existing graphs, showing Fan 1 and Fan 2 (if present) with the fan_rpm_min threshold as a reference line
+- **Hardware snapshots** — automatic factory snapshot captured on first device discovery, recording: frequency, core voltage (set and actual), fan mode, manual/PID fan speed, PID target temp, overheat/shutdown temp, firmware version
+  - New **Snapshots** sidebar page shows all snapshots grouped by device, filterable by factory/manual, searchable
+  - Manual snapshot button on device detail page (📷 Snapshot) — prompts for a label
+  - Factory snapshots are permanent and cannot be deleted — they are the baseline record of how the device arrived from manufacturer
+  - New DB table: `hardware_snapshots` — created automatically, safe upgrade from previous versions
+
+---
+
 ## v0.6.3 — 2026-04-06
 
 ### Fixed

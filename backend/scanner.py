@@ -10,7 +10,7 @@ import aiohttp
 from sqlmodel import Session, select
 
 from database import engine, get_thresholds
-from models import Device, MetricSnapshot, AlertLog, ScanConfig, Session as DBSession, HWNonceEvent
+from models import Device, MetricSnapshot, AlertLog, ScanConfig, Session as DBSession, HardwareSnapshot, HWNonceEvent
 import nonce_tracker
 
 logger = logging.getLogger("bitscope.scanner")

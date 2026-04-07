@@ -46,7 +46,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from database import init_db, get_session, engine
 from models import (
     Device, MetricSnapshot, Session as DBSession,
-    ThresholdConfig, AlertLog, ScanConfig,
+    ThresholdConfig, AlertLog, ScanConfig, HardwareSnapshot,
     HWNonceEvent, DigestConfig,
 )
 from scanner import scan_and_discover, poll_all_devices, upsert_device, fetch_device_info, get_discord_enabled, set_discord_enabled
@@ -1246,6 +1246,87 @@ def configure_history(limit: int = 100, db: Session = Depends(get_session)):
         .order_by(AlertLog.ts.desc()).limit(limit)
     ).all()
     return logs
+
+
+# ── Hardware Snapshots ───────────────────────────────────────────────────────
+
+def _make_hw_snapshot(mac: str, data: dict, label: str = "factory") -> HardwareSnapshot:
+    """Build a HardwareSnapshot from a raw device API response."""
+    return HardwareSnapshot(
+        mac=mac, label=label,
+        frequency=data.get("frequency"),
+        core_voltage=data.get("coreVoltage"),
+        core_voltage_actual=data.get("coreVoltageActual"),
+        autofanspeed=data.get("autofanspeed"),
+        fanspeed=data.get("fanspeed"),
+        manual_fan_speed=data.get("manualFanSpeed"),
+        pid_target_temp=data.get("pidTargetTemp"),
+        overheat_temp=data.get("overheat_temp"),
+        firmware_version=data.get("version"),
+        asic_model=data.get("ASICModel"),
+        device_model=data.get("deviceModel") or data.get("boardVersion"),
+        raw=json.dumps(data),
+    )
+
+
+@app.get("/api/snapshots")
+def list_all_snapshots(db: Session = Depends(get_session)):
+    snaps = db.exec(select(HardwareSnapshot).order_by(HardwareSnapshot.ts.desc())).all()
+    result = []
+    for s in snaps:
+        device = db.get(Device, s.mac)
+        result.append({
+            "id": s.id, "mac": s.mac, "ts": s.ts, "label": s.label,
+            "frequency": s.frequency, "core_voltage": s.core_voltage,
+            "core_voltage_actual": s.core_voltage_actual,
+            "autofanspeed": s.autofanspeed, "fanspeed": s.fanspeed,
+            "manual_fan_speed": s.manual_fan_speed,
+            "pid_target_temp": s.pid_target_temp, "overheat_temp": s.overheat_temp,
+            "firmware_version": s.firmware_version, "asic_model": s.asic_model,
+            "device_model": s.device_model,
+            "device_label": device.label if device else None,
+            "device_hostname": device.hostname if device else None,
+        })
+    return result
+
+
+@app.get("/api/devices/{mac}/snapshots")
+def list_device_snapshots(mac: str, db: Session = Depends(get_session)):
+    mac = mac.upper()
+    snaps = db.exec(
+        select(HardwareSnapshot).where(HardwareSnapshot.mac == mac)
+        .order_by(HardwareSnapshot.ts.desc())
+    ).all()
+    return snaps
+
+
+@app.post("/api/devices/{mac}/snapshots")
+async def take_snapshot(mac: str, body: dict = {}, db: Session = Depends(get_session)):
+    """Manually take a hardware snapshot from the live device."""
+    mac = mac.upper()
+    device = db.get(Device, mac)
+    if not device or not device.last_ip:
+        raise HTTPException(404, "Device not found or no IP known")
+    async with aiohttp.ClientSession() as http:
+        data = await scanner.fetch_device_info(device.last_ip, http)
+    if not data:
+        raise HTTPException(502, "Could not reach device")
+    label = body.get("label", "manual")
+    snap = _make_hw_snapshot(mac, data, label=label)
+    db.add(snap)
+    db.commit()
+    db.refresh(snap)
+    return snap
+
+
+@app.delete("/api/snapshots/{snapshot_id}")
+def delete_snapshot(snapshot_id: int, db: Session = Depends(get_session)):
+    snap = db.get(HardwareSnapshot, snapshot_id)
+    if not snap:
+        raise HTTPException(404)
+    db.delete(snap)
+    db.commit()
+    return {"ok": True}
 
 
 # ── Pool Monitor ─────────────────────────────────────────────────────────────

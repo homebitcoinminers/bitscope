@@ -77,6 +77,12 @@ export const api = {
   // Legacy per-device endpoints (kept for identify/restart)
   configureTuning: (mac, body) => req('POST', `/devices/${mac}/configure/tuning`, body),
 
+  // Hardware snapshots
+  snapshots: () => req('GET', '/snapshots'),
+  deviceSnapshots: (mac) => req('GET', `/devices/${mac}/snapshots`),
+  takeSnapshot: (mac, label) => req('POST', `/devices/${mac}/snapshots`, { label }),
+  deleteSnapshot: (id) => req('DELETE', `/snapshots/${id}`),
+
   // Pool monitor
   pools: () => req('GET', '/pools'),
   addPool: (body) => req('POST', '/pools', body),

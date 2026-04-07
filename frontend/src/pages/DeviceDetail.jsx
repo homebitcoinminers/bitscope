@@ -8,7 +8,7 @@ import {
   formatHashrate, formatUptime, formatDiff, verdictBadge, timeRangeToHours,
   healthColor,
 } from '../components/UI.jsx'
-import { HashrateChart, MetricChart, AsicTempBars } from '../components/Charts.jsx'
+import { HashrateChart, MetricChart, TempChart, FanChart, AsicTempBars } from '../components/Charts.jsx'
 
 
 const PRESET_RANGES = ['1h', '6h', '24h', '7d', '2w', '1mo', 'all']
@@ -338,10 +338,10 @@ export default function DeviceDetail() {
               <HashrateChart data={metrics} height={130} />
             </div>
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: theme.muted, marginBottom: 4 }}>Temperature (°C)</div>
-              <MetricChart data={metrics} metric="temp" label="Temp °C" unit="°" threshold={myThresh?.temp_max} height={110} />
+              <div style={{ fontSize: 11, color: theme.muted, marginBottom: 4 }}>Temperature (°C) — Chip &amp; VR</div>
+              <TempChart data={metrics} threshold={myThresh?.temp_max} height={120} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
               <div>
                 <div style={{ fontSize: 11, color: theme.muted, marginBottom: 4 }}>Power (W)</div>
                 <MetricChart data={metrics} metric="power" label="Power W" unit="W"
@@ -352,6 +352,10 @@ export default function DeviceDetail() {
                 <MetricChart data={metrics} metric="error_percentage" label="Error %" unit="%"
                   threshold={myThresh?.error_pct_max} height={100} color="#e24b4a" />
               </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: theme.muted, marginBottom: 4 }}>Fan speed (RPM)</div>
+              <FanChart data={metrics} threshold={myThresh?.fan_rpm_min} height={90} />
             </div>
           </Card>
 

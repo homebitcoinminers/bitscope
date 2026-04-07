@@ -155,3 +155,57 @@ export function AsicTempBars({ temps, threshold }) {
     </div>
   )
 }
+
+export function TempChart({ data, threshold, height = 130 }) {
+  if (!data?.length) return (
+    <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#aaa', fontSize: 12 }}>No data</div>
+  )
+  const chartData = data.map(s => ({
+    ts: s.ts,
+    'Chip':    s.temp    != null ? +s.temp.toFixed(2)    : null,
+    'VR':      s.vr_temp != null ? +s.vr_temp.toFixed(2) : null,
+  }))
+  const hasVr = chartData.some(d => d['VR'] != null)
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor()} vertical={false} />
+        <XAxis dataKey="ts" tickFormatter={ts => ts ? fmtTs(ts) : ''} tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} minTickGap={40} />
+        <YAxis tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} width={34} tickFormatter={v => `${v.toFixed(0)}°`} />
+        <Tooltip content={<CustomTooltip />} />
+        {threshold && <ReferenceLine y={threshold} stroke="#e24b4a" strokeDasharray="4 3" strokeWidth={1}
+          label={{ value: `${threshold}°`, position: 'right', fontSize: 9, fill: '#e24b4a' }} />}
+        <Legend wrapperStyle={{ fontSize: 11 }} />
+        <Line type="monotone" dataKey="Chip" stroke="#ef9f27" strokeWidth={1.5} dot={false} activeDot={{ r: 3 }} connectNulls={false} />
+        {hasVr && <Line type="monotone" dataKey="VR" stroke="#d85a30" strokeWidth={1} dot={false} strokeDasharray="4 2" connectNulls={false} />}
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
+export function FanChart({ data, threshold, height = 100 }) {
+  if (!data?.length) return (
+    <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#aaa', fontSize: 12 }}>No data</div>
+  )
+  const chartData = data.map(s => ({
+    ts: s.ts,
+    'Fan RPM':  s.fan_rpm  != null ? s.fan_rpm  : null,
+    'Fan 2 RPM': s.fan2_rpm != null && s.fan2_rpm > 0 ? s.fan2_rpm : null,
+  }))
+  const hasFan2 = chartData.some(d => d['Fan 2 RPM'] != null)
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor()} vertical={false} />
+        <XAxis dataKey="ts" tickFormatter={ts => ts ? fmtTs(ts) : ''} tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} minTickGap={40} />
+        <YAxis tick={{ fontSize: 10, fill: chartAxisColor() }} axisLine={false} tickLine={false} width={44} tickFormatter={v => `${v.toFixed(0)}`} />
+        <Tooltip content={<CustomTooltip />} />
+        {threshold && <ReferenceLine y={threshold} stroke="#e24b4a" strokeDasharray="4 3" strokeWidth={1}
+          label={{ value: `min ${threshold}`, position: 'right', fontSize: 9, fill: '#e24b4a' }} />}
+        {hasFan2 && <Legend wrapperStyle={{ fontSize: 11 }} />}
+        <Line type="monotone" dataKey="Fan RPM" stroke="#1d9e75" strokeWidth={1.5} dot={false} activeDot={{ r: 3 }} connectNulls={false} />
+        {hasFan2 && <Line type="monotone" dataKey="Fan 2 RPM" stroke="#0f6e56" strokeWidth={1} dot={false} strokeDasharray="4 2" connectNulls={false} />}
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}

@@ -106,6 +106,31 @@ class ThresholdConfig(SQLModel, table=True):
     hw_nonce_consecutive_polls: Optional[int] = 3   # must breach for N polls before alerting
 
 
+class HardwareSnapshot(SQLModel, table=True):
+    """Records hardware settings at the moment a device is first discovered.
+    Also supports manual snapshots. Acts as a baseline / factory record."""
+    __tablename__ = "hardware_snapshots"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    mac: str = Field(index=True)
+    ts: datetime = Field(default_factory=datetime.utcnow)
+    label: Optional[str] = None          # "factory", "manual", "post-flash", etc.
+    # Core settings captured
+    frequency: Optional[int] = None
+    core_voltage: Optional[int] = None
+    core_voltage_actual: Optional[int] = None
+    autofanspeed: Optional[int] = None   # 0=manual, 2=auto
+    fanspeed: Optional[float] = None     # current fan %
+    manual_fan_speed: Optional[int] = None
+    pid_target_temp: Optional[int] = None
+    overheat_temp: Optional[int] = None
+    # Device identity at snapshot time
+    firmware_version: Optional[str] = None
+    asic_model: Optional[str] = None
+    device_model: Optional[str] = None
+    # Full raw API response for completeness
+    raw: Optional[str] = None
+
+
 class AlertLog(SQLModel, table=True):
     __tablename__ = "alert_log"
     id: Optional[int] = Field(default=None, primary_key=True)

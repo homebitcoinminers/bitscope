@@ -8,6 +8,7 @@ import Scanner from './pages/Scanner.jsx'
 import Thresholds from './pages/Thresholds.jsx'
 import Logs from './pages/Logs.jsx'
 import PoolMonitor from './pages/PoolMonitor.jsx'
+import Snapshots from './pages/Snapshots.jsx'
 import PoolChecker from './pages/PoolChecker.jsx'
 import Profiles from './pages/Profiles.jsx'
 import Configure from './pages/Configure.jsx'
@@ -49,6 +50,7 @@ const NAV = [
   { to: '/sessions', label: 'Sessions', icon: ChartIcon },
   { to: '/alerts', label: 'Alerts', icon: BellIcon },
   { to: '/configure', label: 'Configure', icon: WrenchIcon },
+  { to: '/snapshots', label: 'Snapshots', icon: CameraIcon },
   { to: '/pool-monitor', label: 'Pool Monitor', icon: PoolIcon },
   { to: '/pool-checker', label: 'Pool Checker', icon: CheckerIcon },
   { to: '/scanner', label: 'Scanner', icon: RadarIcon },
@@ -89,6 +91,7 @@ export default function App() {
               <Route path="/logs" element={<Logs />} />
               <Route path="/profiles" element={<Profiles />} />
               <Route path="/configure" element={<Configure />} />
+              <Route path="/snapshots" element={<Snapshots />} />
               <Route path="/pool-monitor" element={<PoolMonitor />} />
               <Route path="/pool-checker" element={<PoolChecker />} />
             </Routes>
@@ -303,6 +306,9 @@ function SliderIcon({ size = 14 }) {
 }
 function ShieldIcon({ size = 16, color = 'currentColor' }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill={color}><path d="M8 1L2 4v4c0 3.5 2.5 6.5 6 7.5 3.5-1 6-4 6-7.5V4L8 1z"/></svg>
+}
+function CameraIcon({ size = 14 }) {
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path d="M6.5 2L5 4H2a1 1 0 00-1 1v8a1 1 0 001 1h12a1 1 0 001-1V5a1 1 0 00-1-1h-3L9.5 2h-3zM8 12a3 3 0 110-6 3 3 0 010 6z"/></svg>
 }
 function CheckerIcon({ size = 14 }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1zM6 11L3.5 8.5l1-1L6 9l5.5-5.5 1 1L6 11z"/></svg>
