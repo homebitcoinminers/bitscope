@@ -20,6 +20,12 @@ services:
     image: ghcr.io/homebitcoinminers/bitscope-frontend:latest
     container_name: bitscope-frontend
     restart: unless-stopped
+    environment:
+      # URL the nginx proxy uses to reach the backend — must be reachable from inside this container.
+      # Default assumes both services are on the same Docker Compose network (service name = hostname).
+      # Change if you rename the backend service or run containers on separate networks:
+      #   BITSCOPE_BACKEND_URL=http://192.168.1.50:8000
+      - BITSCOPE_BACKEND_URL=${BITSCOPE_BACKEND_URL:-http://backend:8000}
     ports:
       - "8080:80"
     depends_on:
