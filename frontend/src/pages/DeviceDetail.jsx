@@ -43,6 +43,23 @@ export default function DeviceDetail() {
   const [nonceHistory, setNonceHistory] = useState([])
   const [nonceRange, setNonceRange] = useState(24)
   const [deviceAlerts, setDeviceAlerts] = useState([])
+  const [snapshotting, setSnapshotting] = useState(false)
+  const [snapshotStatus, setSnapshotStatus] = useState(null)
+
+  const takeSnapshot = async (label = 'manual') => {
+    setSnapshotting(true)
+    setSnapshotStatus(null)
+    try {
+      await api.takeSnapshot(mac, label)
+      setSnapshotStatus('ok')
+      setTimeout(() => setSnapshotStatus(null), 3000)
+    } catch {
+      setSnapshotStatus('err')
+      setTimeout(() => setSnapshotStatus(null), 3000)
+    } finally {
+      setSnapshotting(false)
+    }
+  }
 
   const loadDeviceAlerts = useCallback(async () => {
     api.deviceAlerts(mac, 30).then(setDeviceAlerts).catch(() => {})
@@ -197,6 +214,14 @@ export default function DeviceDetail() {
             <Badge color={online ? 'green' : 'gray'}>{online ? 'online' : 'offline'}</Badge>
             <Btn onClick={() => setEditing(true)} small>Rename</Btn>
             <Btn onClick={() => api.identifyDevice(mac)} small>Identify 💡</Btn>
+            <Btn onClick={() => {
+              const label = prompt('Snapshot label:', 'manual')
+              if (label !== null) takeSnapshot(label || 'manual')
+            }} small disabled={snapshotting}>
+              {snapshotting ? 'Saving…' : '📷 Snapshot'}
+            </Btn>
+            {snapshotStatus === 'ok' && <span style={{ fontSize: 11, color: '#639922' }}>✓ Saved</span>}
+            {snapshotStatus === 'err' && <span style={{ fontSize: 11, color: '#e24b4a' }}>✗ Failed</span>}
             <button onClick={() => { loadDevice(); loadMetrics() }} title="Refresh now" style={{
               background: 'none', border: `0.5px solid ${theme.border}`, borderRadius: 6,
               padding: '4px 8px', cursor: 'pointer', color: theme.muted, fontSize: 16, lineHeight: 1,

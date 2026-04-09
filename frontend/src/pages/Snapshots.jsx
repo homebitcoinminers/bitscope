@@ -4,6 +4,82 @@ import { PageWrap, Topbar, Card, Btn, Badge, useTheme } from '../components/UI.j
 
 // ── Sub-components at module level ────────────────────────────────────────────
 
+function TakeSnapshotBar({ devices, onTaken, taking, setTaking, theme }) {
+  const [selectedMac, setSelectedMac] = useState('')
+  const [label, setLabel] = useState('manual')
+  const [status, setStatus] = useState(null)  // null | 'ok' | 'err'
+
+  const online = devices.filter(d => {
+    if (!d.last_seen) return false
+    return (Date.now() - new Date(d.last_seen)) / 1000 < 120
+  })
+
+  const take = async () => {
+    if (!selectedMac) return
+    setTaking(t => ({ ...t, [selectedMac]: true }))
+    setStatus(null)
+    try {
+      await api.takeSnapshot(selectedMac, label || 'manual')
+      setStatus('ok')
+      onTaken()
+      setTimeout(() => setStatus(null), 3000)
+    } catch {
+      setStatus('err')
+      setTimeout(() => setStatus(null), 3000)
+    } finally {
+      setTaking(t => ({ ...t, [selectedMac]: false }))
+    }
+  }
+
+  const deviceName = (d) => d.label || d.hostname || d.mac
+
+  return (
+    <div style={{
+      padding: '10px 16px',
+      borderBottom: `0.5px solid ${theme.border}`,
+      background: theme.statBg,
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+    }}>
+      <span style={{ fontSize: 12, color: theme.muted, flexShrink: 0 }}>📷 Take snapshot:</span>
+      <select
+        value={selectedMac}
+        onChange={e => setSelectedMac(e.target.value)}
+        style={{
+          fontSize: 12, padding: '4px 8px', borderRadius: 6,
+          border: `0.5px solid ${theme.border}`,
+          background: theme.inputBg, color: theme.text, flex: '1 1 180px', maxWidth: 260,
+        }}
+      >
+        <option value="">Select device…</option>
+        {online.map(d => (
+          <option key={d.mac} value={d.mac}>{deviceName(d)} ({d.model || d.mac})</option>
+        ))}
+        {online.length === 0 && <option disabled>No devices online</option>}
+      </select>
+      <input
+        value={label}
+        onChange={e => setLabel(e.target.value)}
+        placeholder="Label (e.g. after-OC)"
+        style={{
+          fontSize: 12, padding: '4px 8px', borderRadius: 6,
+          border: `0.5px solid ${theme.border}`,
+          background: theme.inputBg, color: theme.text, width: 160,
+        }}
+      />
+      <Btn
+        primary small
+        onClick={take}
+        disabled={!selectedMac || taking[selectedMac]}
+      >
+        {taking[selectedMac] ? 'Saving…' : 'Save snapshot'}
+      </Btn>
+      {status === 'ok' && <span style={{ fontSize: 12, color: '#639922' }}>✓ Snapshot saved</span>}
+      {status === 'err' && <span style={{ fontSize: 12, color: '#e24b4a' }}>✗ Failed — device reachable?</span>}
+    </div>
+  )
+}
+
+
 function SnapField({ label, value, mono, highlight }) {
   const theme = useTheme()
   return (
@@ -86,8 +162,12 @@ export default function Snapshots() {
   const [taking, setTaking] = useState({})
   const [filter, setFilter] = useState('all')    // 'all' | 'factory' | 'manual'
   const [search, setSearch] = useState('')
+  const [devices, setDevices] = useState([])
 
-  const load = () => api.snapshots().then(setSnaps).catch(() => {}).finally(() => setLoading(false))
+  const load = () => {
+    api.snapshots().then(setSnaps).catch(() => {}).finally(() => setLoading(false))
+    api.devices().then(setDevices).catch(() => {})
+  }
   useEffect(() => { load() }, [])
 
   const deleteSnap = async (id) => {
@@ -147,6 +227,9 @@ export default function Snapshots() {
         </div>
       </Topbar>
 
+      {/* Take snapshot for any device */}
+      <TakeSnapshotBar devices={devices} onTaken={load} taking={taking} setTaking={setTaking} theme={theme} />
+
       <div style={{ padding: 16, overflowY: 'auto', flex: 1 }}>
         {loading ? (
           <div style={{ color: theme.muted, fontSize: 12 }}>Loading…</div>
@@ -156,7 +239,7 @@ export default function Snapshots() {
             <div style={{ fontWeight: 500, color: theme.text }}>No snapshots yet</div>
             <div style={{ fontSize: 12, marginTop: 6 }}>
               Factory snapshots are captured automatically when a device is first discovered.
-              Manual snapshots can be taken from any device's detail page.
+              Manual snapshots can be taken using the bar above, or from any device's detail page.
             </div>
           </div>
         ) : (
