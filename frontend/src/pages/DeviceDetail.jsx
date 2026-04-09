@@ -212,7 +212,7 @@ export default function DeviceDetail() {
 
 
 
-      <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 300px', gap: 14, alignItems: 'start' }}>
+      <div className='bs-two-col' style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 300px', gap: 14, alignItems: 'start' }}>
 
         {/* LEFT COLUMN */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -446,7 +446,7 @@ export default function DeviceDetail() {
         </div>
 
         {/* RIGHT COLUMN */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className='bs-detail-right' style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {/* ASIC temps — show when device has asic_temps array, even if zeros */}
           {asicTemps !== null && Array.isArray(asicTemps) && asicTemps.length > 0 && (

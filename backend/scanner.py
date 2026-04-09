@@ -315,7 +315,25 @@ async def scan_and_discover():
                     alert = AlertLog(mac=mac, alert_type="new_device",
                         message=f"New device: {data.get('deviceModel','Unknown')} at {data.get('ipv4') or data.get('hostip')}")
                     db.add(alert)
+                    # Auto-capture factory hardware snapshot on first discovery
+                    factory_snap = HardwareSnapshot(
+                        mac=mac, label="factory",
+                        frequency=data.get("frequency"),
+                        core_voltage=data.get("coreVoltage"),
+                        core_voltage_actual=data.get("coreVoltageActual"),
+                        autofanspeed=data.get("autofanspeed"),
+                        fanspeed=data.get("fanspeed"),
+                        manual_fan_speed=data.get("manualFanSpeed"),
+                        pid_target_temp=data.get("pidTargetTemp"),
+                        overheat_temp=data.get("overheat_temp"),
+                        firmware_version=data.get("version"),
+                        asic_model=data.get("ASICModel"),
+                        device_model=data.get("deviceModel") or data.get("boardVersion"),
+                        raw=json.dumps(data),
+                    )
+                    db.add(factory_snap)
                     db.commit()
+                    logger.info(f"Factory snapshot saved for {mac}")
                     await send_discord_alert(alert, device)
                 snapshot = parse_snapshot(mac=mac, data=data)
                 db.add(snapshot)

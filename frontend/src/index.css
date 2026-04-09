@@ -22,3 +22,35 @@ input, select, textarea {
 }
 
 .mono { font-family: 'SF Mono', 'Fira Code', monospace; }
+
+
+/* ── Mobile responsiveness ───────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .bs-hamburger { display: flex !important; }
+  .bs-mob-overlay { display: block !important; }
+  .bs-sidebar {
+    position: fixed !important;
+    top: 0; left: 0;
+    height: 100vh !important;
+    transform: translateX(-220px);
+    transition: transform 0.22s ease;
+    z-index: 1000;
+  }
+  .bs-sidebar.open { transform: translateX(0) !important; }
+  .bs-main { margin-left: 0 !important; }
+  .bs-topbar { padding-left: 48px !important; }
+  /* Collapse stat grids */
+  .bs-stat-grid { grid-template-columns: 1fr 1fr !important; }
+  .bs-device-grid { grid-template-columns: 1fr !important; }
+  /* Hide right column on device detail */
+  .bs-detail-right { display: none !important; }
+  /* Full-width cards */
+  .bs-two-col { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 480px) {
+  .bs-stat-grid { grid-template-columns: 1fr 1fr !important; }
+  .bs-topbar-actions { flex-wrap: wrap; gap: 4px !important; }
+  .bs-topbar-actions button, .bs-topbar-actions span { font-size: 11px !important; }
+}

@@ -1,5 +1,17 @@
 # BitScope Changelog
 
+## v0.6.7 — 2026-04-07
+
+### Fixed
+- **Auto factory snapshot not being taken** — the `HardwareSnapshot` creation code was in the wrong version of the scanner and never made it into the actual codebase. Fixed: factory snapshot is now correctly captured the moment a new device is first discovered
+- **Snapshots page missing from sidebar** — was present in nav array but being cut off on some viewport sizes
+- **nginx envsubst breaking frontend** — `envsubst` was replacing all nginx variables (`$host`, `$uri`, `$remote_addr`) alongside `$BITSCOPE_BACKEND_URL`, resulting in a broken proxy. Fixed with a custom entrypoint that passes explicit variable list: `envsubst '${BITSCOPE_BACKEND_URL}'`
+
+### Added
+- **Mobile responsive layout** — hamburger menu button on screens ≤768px, slide-in sidebar overlay, stat grids collapse to 2-col, device grid goes to 1-col, device detail collapses to single column
+
+---
+
 ## v0.6.5 — 2026-04-07
 
 ### Added

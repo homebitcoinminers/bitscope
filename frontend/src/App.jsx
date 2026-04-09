@@ -80,7 +80,7 @@ export default function App() {
       <BrowserRouter>
         <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: theme.bg }}>
           <Sidebar />
-          <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', background: theme.bg }}>
+          <main className="bs-main" style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', background: theme.bg }}>
             <Routes>
               <Route path="/" element={<Devices />} />
               <Route path="/devices/:mac" element={<DeviceDetail />} />
@@ -104,6 +104,7 @@ export default function App() {
 
 function Sidebar() {
   const { theme, themeName, cycleTheme } = useContext(ThemeContext)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [discordEnabled, setDiscordEnabled] = useState(true)
   const [loadingDiscord, setLoadingDiscord] = useState(false)
   const [tz, setTz] = useState(() => localStorage.getItem('bs-tz') || 'local')
@@ -139,7 +140,21 @@ function Sidebar() {
   const themeLabel = themeName === 'light' ? 'Light' : themeName === 'dark' ? 'Dark' : 'Grey'
 
   return (
-    <nav style={{
+    <>
+      {/* Mobile hamburger button */}
+      <button onClick={() => setMobileOpen(o => !o)} className="bs-hamburger" style={{
+        display: 'none', position: 'fixed', top: 10, left: 10, zIndex: 1001,
+        background: theme.sidebar, border: `0.5px solid ${theme.border}`,
+        borderRadius: 7, padding: '6px 9px', cursor: 'pointer', color: theme.text, fontSize: 18,
+        alignItems: 'center', justifyContent: 'center',
+      }}>☰</button>
+
+      {/* Overlay for mobile */}
+      {mobileOpen && <div onClick={() => setMobileOpen(false)} className="bs-mob-overlay" style={{
+        display: 'none', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 999,
+      }} />}
+
+    <nav className={`bs-sidebar${mobileOpen ? ' open' : ''}`} style={{
       width: 210, flexShrink: 0,
       background: theme.sidebar,
       borderRight: `0.5px solid ${theme.border}`,
@@ -183,9 +198,9 @@ function Sidebar() {
       {/* Nav */}
       <div style={{ flex: 1, paddingTop: 8, overflowY: 'auto' }}>
         <NavSection theme={theme}>Monitor</NavSection>
-        {NAV.slice(0, 3).map(item => <SideItem key={item.to} {...item} theme={theme} />)}
+        {NAV.slice(0, 3).map(item => <SideItem key={item.to} {...item} theme={theme} onNav={() => setMobileOpen(false)} />)}
         <NavSection theme={theme}>Manage</NavSection>
-        {NAV.slice(3).map(item => <SideItem key={item.to} {...item} theme={theme} />)}
+        {NAV.slice(3).map(item => <SideItem key={item.to} {...item} theme={theme} onNav={() => setMobileOpen(false)} />)}
       </div>
 
       {/* Footer controls */}
@@ -254,6 +269,7 @@ function Sidebar() {
         <div style={{ fontSize: 10, color: theme.faint }}>BitScope · homebitcoinminers.au</div>
       </div>
     </nav>
+    </>
   )
 }
 
@@ -265,11 +281,12 @@ function NavSection({ children, theme }) {
   )
 }
 
-function SideItem({ to, label, icon: Icon, exact, theme }) {
+function SideItem({ to, label, icon: Icon, exact, theme, onNav }) {
   return (
     <NavLink
       to={to}
       end={exact}
+      onClick={onNav}
       style={({ isActive }) => ({
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '7px 16px',
