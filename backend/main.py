@@ -1321,7 +1321,7 @@ async def take_snapshot(mac: str, body: dict = {}, db: Session = Depends(get_ses
     if not device or not device.last_ip:
         raise HTTPException(404, "Device not found or no IP known")
     async with aiohttp.ClientSession() as http:
-        data = await scanner.fetch_device_info(device.last_ip, http)
+        data = await fetch_device_info(device.last_ip, http)
     if not data:
         raise HTTPException(502, "Could not reach device")
     label = body.get("label", "manual")
