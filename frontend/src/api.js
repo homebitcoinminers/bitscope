@@ -79,6 +79,12 @@ export const api = {
 
   deviceAlerts: (mac, limit = 50) => req('GET', `/devices/${mac}/alerts?limit=${limit}`),
 
+  // UI preferences — server-persisted, syncs across browsers/devices
+  prefs: () => req('GET', '/prefs'),
+  getPref: (key) => req('GET', `/prefs/${encodeURIComponent(key)}`),
+  setPref: (key, value) => req('PUT', `/prefs/${encodeURIComponent(key)}`, { value }),
+  deletePref: (key) => req('DELETE', `/prefs/${encodeURIComponent(key)}`),
+
   // Maintenance
   maintenanceStats: () => req('GET', '/maintenance/stats'),
   maintenanceCleanup: () => req('POST', '/maintenance/cleanup', {}),

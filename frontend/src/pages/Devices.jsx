@@ -60,8 +60,15 @@ const ALL_COLS = [
 const DEFAULT_COLS = ALL_COLS.filter(c => c.default).map(c => c.key)
 
 function loadCols() {
-  try { return JSON.parse(localStorage.getItem('bs-table-cols')) || DEFAULT_COLS }
-  catch { return DEFAULT_COLS }
+  try {
+    const saved = JSON.parse(localStorage.getItem('bs-table-cols'))
+    if (!Array.isArray(saved) || saved.length === 0) return DEFAULT_COLS
+    // Filter to only known column keys (drops removed ones, ignores typos)
+    const valid = saved.filter(k => ALL_COLS.some(c => c.key === k))
+    return valid.length > 0 ? valid : DEFAULT_COLS
+  } catch {
+    return DEFAULT_COLS
+  }
 }
 
 export default function Devices() {
@@ -99,15 +106,46 @@ export default function Devices() {
 
   useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t) }, [load])
 
+  // Hydrate UI prefs from server on mount — overrides localStorage so prefs sync across browsers
+  useEffect(() => {
+    api.prefs().then(prefs => {
+      if (prefs['devices.cols'] && Array.isArray(prefs['devices.cols'])) {
+        const valid = prefs['devices.cols'].filter(k => ALL_COLS.some(c => c.key === k))
+        if (valid.length > 0) {
+          setVisibleCols(valid)
+          localStorage.setItem('bs-table-cols', JSON.stringify(valid))
+        }
+      }
+      if (prefs['devices.view']) {
+        setView(prefs['devices.view'])
+        localStorage.setItem('bs-view', prefs['devices.view'])
+      }
+      if (prefs['devices.sortKey']) {
+        setSortKey(prefs['devices.sortKey'])
+        localStorage.setItem('bs-sort-key', prefs['devices.sortKey'])
+      }
+      if (prefs['devices.sortDir']) {
+        setSortDir(prefs['devices.sortDir'])
+        localStorage.setItem('bs-sort-dir', prefs['devices.sortDir'])
+      }
+    }).catch(() => {})   // server unreachable — fall back to localStorage values
+  }, [])
+
   const changeSort = key => {
     const next = sortKey === key ? (sortDir === 'asc' ? 'desc' : 'asc') : 'desc'
     setSortKey(key); setSortDir(next)
     localStorage.setItem('bs-sort-key', key); localStorage.setItem('bs-sort-dir', next)
+    api.setPref('devices.sortKey', key).catch(() => {})
+    api.setPref('devices.sortDir', next).catch(() => {})
   }
-  const changeView = v => { setView(v); localStorage.setItem('bs-view', v) }
+  const changeView = v => {
+    setView(v); localStorage.setItem('bs-view', v)
+    api.setPref('devices.view', v).catch(() => {})
+  }
   const toggleCol  = key => {
     const next = visibleCols.includes(key) ? visibleCols.filter(k => k !== key) : [...visibleCols, key]
     setVisibleCols(next); localStorage.setItem('bs-table-cols', JSON.stringify(next))
+    api.setPref('devices.cols', next).catch(() => {})
   }
 
   const refresh = async () => { setRefreshing(true); await load(); setRefreshing(false) }
@@ -290,7 +328,7 @@ export default function Devices() {
                   <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 100, background: theme.surface, border: `0.5px solid ${theme.border}`, borderRadius: 8, padding: '12px 0', minWidth: 240, maxHeight: 480, overflowY: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.18)' }}>
                     <div style={{ padding: '0 14px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: 11, color: theme.muted, fontWeight: 500 }}>Toggle columns</span>
-                      <button onClick={() => { setVisibleCols(DEFAULT_COLS); localStorage.setItem('bs-table-cols', JSON.stringify(DEFAULT_COLS)) }} style={{ fontSize: 10, color: theme.accent, background: 'none', border: 'none', cursor: 'pointer' }}>Reset defaults</button>
+                      <button onClick={() => { setVisibleCols(DEFAULT_COLS); localStorage.setItem('bs-table-cols', JSON.stringify(DEFAULT_COLS)); api.setPref('devices.cols', DEFAULT_COLS).catch(() => {}) }} style={{ fontSize: 10, color: theme.accent, background: 'none', border: 'none', cursor: 'pointer' }}>Reset defaults</button>
                     </div>
                     {colGroups.map(group => (
                       <div key={group}>

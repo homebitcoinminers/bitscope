@@ -47,7 +47,7 @@ from database import init_db, get_session, engine
 from models import (
     Device, MetricSnapshot, Session as DBSession,
     ThresholdConfig, AlertLog, ScanConfig, HardwareSnapshot, HWNonceEvent,
-    DigestConfig,
+    DigestConfig, UIPref,
 )
 from scanner import scan_and_discover, poll_all_devices, upsert_device, fetch_device_info, get_discord_enabled, set_discord_enabled
 import nonce_tracker
@@ -1518,6 +1518,55 @@ def toggle_discord():
     set_discord_enabled(new_state)
     return {"discord_enabled": new_state}
 
+
+
+# ── UI Preferences (persisted server-side across browsers) ───────────────────
+
+@app.get("/api/prefs")
+def list_prefs(db: Session = Depends(get_session)):
+    """Return all UI prefs as a single {key: parsed_value} object."""
+    rows = db.exec(select(UIPref)).all()
+    result = {}
+    for r in rows:
+        try:
+            result[r.key] = json.loads(r.value)
+        except Exception:
+            result[r.key] = r.value
+    return result
+
+
+@app.get("/api/prefs/{key}")
+def get_pref(key: str, db: Session = Depends(get_session)):
+    row = db.get(UIPref, key)
+    if not row:
+        return {"key": key, "value": None}
+    try:
+        return {"key": key, "value": json.loads(row.value)}
+    except Exception:
+        return {"key": key, "value": row.value}
+
+
+@app.put("/api/prefs/{key}")
+def set_pref(key: str, body: dict, db: Session = Depends(get_session)):
+    """Body: {"value": <any JSON-serializable>}"""
+    value_json = json.dumps(body.get("value"))
+    row = db.get(UIPref, key)
+    if row:
+        row.value = value_json
+        row.updated_at = datetime.utcnow()
+    else:
+        db.add(UIPref(key=key, value=value_json))
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/prefs/{key}")
+def delete_pref(key: str, db: Session = Depends(get_session)):
+    row = db.get(UIPref, key)
+    if row:
+        db.delete(row)
+        db.commit()
+    return {"ok": True}
 
 
 # ── Maintenance ──────────────────────────────────────────────────────────────

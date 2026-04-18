@@ -174,3 +174,12 @@ class DigestConfig(SQLModel, table=True):
     hour_utc: int = 22                  # 22:00 UTC = 8am AEST
     minute_utc: int = 0
     last_sent: Optional[datetime] = None
+
+
+class UIPref(SQLModel, table=True):
+    """Key-value store for UI preferences that persist across browsers/devices.
+    Single global namespace since BitScope has no user accounts."""
+    __tablename__ = "ui_prefs"
+    key: str = Field(primary_key=True)
+    value: str                       # JSON-encoded value
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
