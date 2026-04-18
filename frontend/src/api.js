@@ -79,6 +79,11 @@ export const api = {
 
   deviceAlerts: (mac, limit = 50) => req('GET', `/devices/${mac}/alerts?limit=${limit}`),
 
+  // Maintenance
+  maintenanceStats: () => req('GET', '/maintenance/stats'),
+  maintenanceCleanup: () => req('POST', '/maintenance/cleanup', {}),
+  maintenanceVacuum: () => req('POST', '/maintenance/vacuum', {}),
+
   // Hardware snapshots
   snapshots: () => req('GET', '/snapshots'),
   deviceSnapshots: (mac) => req('GET', `/devices/${mac}/snapshots`),

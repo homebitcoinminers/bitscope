@@ -46,8 +46,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from database import init_db, get_session, engine
 from models import (
     Device, MetricSnapshot, Session as DBSession,
-    ThresholdConfig, AlertLog, ScanConfig, HardwareSnapshot,
-    HWNonceEvent, DigestConfig,
+    ThresholdConfig, AlertLog, ScanConfig, HardwareSnapshot, HWNonceEvent,
+    DigestConfig,
 )
 from scanner import scan_and_discover, poll_all_devices, upsert_device, fetch_device_info, get_discord_enabled, set_discord_enabled
 import nonce_tracker
@@ -76,13 +76,43 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(scan_and_discover, "interval", seconds=scan_interval, id="scan")
     scheduler.add_job(_check_daily_digest, "interval", minutes=5, id="digest_check")
     scheduler.add_job(_run_pool_monitor, "interval", minutes=5, id="pool_monitor")
+    scheduler.add_job(_run_retention_cleanup, "interval", hours=6, id="retention_cleanup")
     scheduler.start()
+    # Run cleanup once on startup so first-time users see immediate effect
+    asyncio.create_task(asyncio.to_thread(_run_retention_cleanup))
 
     # Initial scan on startup
     asyncio.create_task(scan_and_discover())
 
     yield
     scheduler.shutdown()
+
+
+
+def _run_retention_cleanup():
+    """Delete metric/alert/nonce rows older than DATA_RETENTION_DAYS. Runs every 6h."""
+    days = int(os.getenv("DATA_RETENTION_DAYS", "365"))
+    if days <= 0:
+        return
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    from sqlalchemy import delete
+    with Session(engine) as db:
+        deleted_metrics = db.execute(
+            delete(MetricSnapshot).where(MetricSnapshot.ts < cutoff)
+        ).rowcount
+        deleted_alerts = db.execute(
+            delete(AlertLog).where(AlertLog.ts < cutoff)
+        ).rowcount
+        deleted_nonces = db.execute(
+            delete(HWNonceEvent).where(HWNonceEvent.ts < cutoff)
+        ).rowcount
+        db.commit()
+    if deleted_metrics or deleted_alerts or deleted_nonces:
+        import logging
+        logging.getLogger("bitscope").info(
+            f"Retention cleanup: removed {deleted_metrics} metrics, "
+            f"{deleted_alerts} alerts, {deleted_nonces} nonce events older than {days}d"
+        )
 
 
 app = FastAPI(title="BitScope", lifespan=lifespan)
@@ -95,27 +125,48 @@ app.add_middleware(
 )
 
 
+
+def _latest_snapshots_for_macs(db: Session, macs: list[str]) -> dict[str, MetricSnapshot]:
+    """One SQL query to fetch the latest MetricSnapshot per mac. Returns dict {mac: snapshot}."""
+    if not macs:
+        return {}
+    # Use a window-function-free approach: group by mac, get max id (id is monotonic with ts)
+    from sqlalchemy import func
+    sub = (
+        select(MetricSnapshot.mac, func.max(MetricSnapshot.id).label("max_id"))
+        .where(MetricSnapshot.mac.in_(macs))
+        .group_by(MetricSnapshot.mac)
+        .subquery()
+    )
+    rows = db.exec(
+        select(MetricSnapshot).join(sub, MetricSnapshot.id == sub.c.max_id)
+    ).all()
+    return {s.mac: s for s in rows}
+
+
+def _active_sessions_for_macs(db: Session, macs: list[str]) -> dict[str, DBSession]:
+    """One SQL query to fetch active session per mac."""
+    if not macs:
+        return {}
+    rows = db.exec(
+        select(DBSession).where(DBSession.mac.in_(macs), DBSession.ended_at == None)
+    ).all()
+    return {s.mac: s for s in rows}
+
+
 # ── Devices ──────────────────────────────────────────────────────────────────
 
 @app.get("/api/devices")
 def list_devices(db: Session = Depends(get_session)):
     devices = db.exec(select(Device)).all()
+    macs = [d.mac for d in devices]
+    # Batch: 2 queries instead of 2N
+    latest_map = _latest_snapshots_for_macs(db, macs)
+    active_map = _active_sessions_for_macs(db, macs)
     result = []
     for d in devices:
-        # Get latest snapshot
-        latest = db.exec(
-            select(MetricSnapshot)
-            .where(MetricSnapshot.mac == d.mac)
-            .order_by(MetricSnapshot.ts.desc())
-        ).first()
-
-        # Active session
-        active_session = db.exec(
-            select(DBSession).where(
-                DBSession.mac == d.mac,
-                DBSession.ended_at == None,
-            )
-        ).first()
+        latest = latest_map.get(d.mac)
+        active_session = active_map.get(d.mac)
 
         result.append({
             "mac": d.mac,
@@ -556,23 +607,20 @@ async def trigger_scan():
 @app.get("/api/stats/fleet")
 def fleet_stats(db: Session = Depends(get_session)):
     devices = db.exec(select(Device)).all()
+    macs = [d.mac for d in devices]
+    latest_map = _latest_snapshots_for_macs(db, macs)
+    active_map = _active_sessions_for_macs(db, macs)
     online = 0
     total_hashrate = 0.0
     total_power = 0.0
-    active_sessions = 0
+    active_sessions = len(active_map)
     cutoff = datetime.utcnow() - timedelta(minutes=3)
-
     for d in devices:
-        latest = db.exec(
-            select(MetricSnapshot).where(MetricSnapshot.mac == d.mac).order_by(MetricSnapshot.ts.desc())
-        ).first()
+        latest = latest_map.get(d.mac)
         if latest and latest.ts > cutoff:
             online += 1
             total_hashrate += latest.hashrate or 0
             total_power += latest.power or 0
-        sess = db.exec(select(DBSession).where(DBSession.mac == d.mac, DBSession.ended_at == None)).first()
-        if sess:
-            active_sessions += 1
 
     efficiency = (total_power / (total_hashrate / 1000)) if total_hashrate > 0 else 0
     return {
@@ -622,20 +670,15 @@ def fleet_history(hours: int = 24, db: Session = Depends(get_session)):
 # 24hr max temp per device for table column
 @app.get("/api/stats/devices/maxtemp")
 def devices_max_temp(db: Session = Depends(get_session)):
+    """Single GROUP BY query — was N+1 across all devices."""
+    from sqlalchemy import func
     since = datetime.utcnow() - timedelta(hours=24)
-    devices = db.exec(select(Device)).all()
-    result = {}
-    for d in devices:
-        snaps = db.exec(
-            select(MetricSnapshot.temp).where(
-                MetricSnapshot.mac == d.mac,
-                MetricSnapshot.ts >= since,
-                MetricSnapshot.temp != None,
-            )
-        ).all()
-        if snaps:
-            result[d.mac] = round(max(snaps), 1)
-    return result
+    rows = db.exec(
+        select(MetricSnapshot.mac, func.max(MetricSnapshot.temp).label("max_temp"))
+        .where(MetricSnapshot.ts >= since, MetricSnapshot.temp != None)
+        .group_by(MetricSnapshot.mac)
+    ).all()
+    return {mac: round(t, 1) for mac, t in rows if t is not None}
 
 
 @app.get("/api/export/csv")
@@ -1460,6 +1503,53 @@ def toggle_discord():
     new_state = not get_discord_enabled()
     set_discord_enabled(new_state)
     return {"discord_enabled": new_state}
+
+
+
+# ── Maintenance ──────────────────────────────────────────────────────────────
+
+@app.get("/api/maintenance/stats")
+def maintenance_stats(db: Session = Depends(get_session)):
+    """DB row counts and file size — useful for diagnosing slow performance."""
+    from sqlalchemy import func
+    import os as _os
+    stats = {
+        "metrics_rows": db.exec(select(func.count()).select_from(MetricSnapshot)).one(),
+        "alerts_rows": db.exec(select(func.count()).select_from(AlertLog)).one(),
+        "sessions_rows": db.exec(select(func.count()).select_from(DBSession)).one(),
+        "hw_nonce_rows": db.exec(select(func.count()).select_from(HWNonceEvent)).one(),
+        "snapshots_rows": db.exec(select(func.count()).select_from(HardwareSnapshot)).one(),
+        "devices_rows": db.exec(select(func.count()).select_from(Device)).one(),
+        "retention_days": int(_os.getenv("DATA_RETENTION_DAYS", "365")),
+    }
+    try:
+        stats["db_size_bytes"] = _os.path.getsize("/data/bitscope.db")
+        stats["db_size_mb"] = round(stats["db_size_bytes"] / 1048576, 2)
+    except OSError:
+        stats["db_size_bytes"] = None
+    return stats
+
+
+@app.post("/api/maintenance/cleanup")
+def maintenance_cleanup_now():
+    """Trigger retention cleanup immediately."""
+    _run_retention_cleanup()
+    return {"ok": True, "message": "Cleanup triggered"}
+
+
+@app.post("/api/maintenance/vacuum")
+def maintenance_vacuum():
+    """VACUUM the SQLite database to reclaim space after large deletes.
+    Can take 10-60s on a large DB. App may pause briefly."""
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        # WAL checkpoint first
+        conn.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
+    # VACUUM cannot run inside a transaction
+    with engine.connect() as conn:
+        conn.execute(text("VACUUM"))
+        conn.commit()
+    return {"ok": True, "message": "VACUUM complete"}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -1,5 +1,29 @@
 # BitScope Changelog
 
+## v0.7.0 — 2026-04-09 — Performance & Maintenance
+
+### Performance (huge improvements expected)
+- **SQLite WAL mode + tuning** — concurrent reads no longer block on the polling writes. Cache size raised from default ~2MB to 64MB; 256MB memory-mapped I/O; synchronous=NORMAL (safe with WAL); 10s busy timeout
+- **Composite indexes added** — `(mac, ts DESC)` on metrics, alerts, hw_nonce_events, hardware_snapshots; `(mac)` on active sessions. The most common queries (latest snapshot per device, "alerts for device X", "metrics for device X over last N hours") now use index seeks instead of table scans. Indexes are created with `IF NOT EXISTS` on startup — safe upgrade
+- **N+1 query elimination** — `/api/devices`, `/api/stats/fleet`, `/api/stats/devices/maxtemp` were doing 2N database queries (one per device). Now batched to 2 total queries each. With 8 devices this is ~5x fewer round-trips per page load
+
+### Data retention (the big one)
+- **Retention cleanup actually runs now** — `DATA_RETENTION_DAYS` was documented but no code ever deleted old data. Added a scheduled job that runs every 6 hours (and once on startup) to purge metrics, alerts, and HW nonce events older than the configured retention. With 8 devices polling every 30s, that's ~70k rows/week of metrics — without cleanup the DB grows indefinitely
+- **Hardware snapshots and sessions are NOT cleaned up** — they're permanent records by design
+
+### New: Maintenance UI
+- **Database stats bar** on the Logs page shows: DB size on disk, row counts per table, retention setting
+- **"Run cleanup" button** triggers retention cleanup immediately (no need to wait 6h or restart)
+- **"VACUUM" button** reclaims disk space after large deletes — takes 10-60s on a large DB. Run this once after upgrading if your DB is bloated
+- New endpoints: `GET /api/maintenance/stats`, `POST /api/maintenance/cleanup`, `POST /api/maintenance/vacuum`
+
+### How to recover from a slow/bloated DB after upgrading
+1. Deploy v0.7.0 — startup will create indexes (may take a minute on a large DB) and run first retention cleanup
+2. Open the Logs page, look at the Database bar to see new row counts and size
+3. Click **VACUUM** to reclaim the disk space freed by cleanup
+
+---
+
 ## v0.6.7 — 2026-04-07
 
 ### Fixed
