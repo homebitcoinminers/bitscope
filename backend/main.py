@@ -636,32 +636,46 @@ def fleet_stats(db: Session = Depends(get_session)):
 
 @app.get("/api/stats/fleet/history")
 def fleet_history(hours: int = 24, db: Session = Depends(get_session)):
-    """Aggregated fleet hashrate/power/efficiency over time for graphing."""
+    """Aggregated fleet hashrate/power/efficiency over time for graphing.
+
+    Correct math: within each time bucket, average each device's readings
+    (one device polled 20x in 10min should count once, not 20x), then sum
+    across all devices. Summing raw snapshots multiplies by the poll rate.
+    """
     since = datetime.utcnow() - timedelta(hours=hours)
     snapshots = db.exec(
         select(MetricSnapshot).where(MetricSnapshot.ts >= since).order_by(MetricSnapshot.ts.asc())
     ).all()
 
-    # Bucket into 10-minute intervals
+    # Bucket into 10-minute intervals, keyed by (bucket_ts, mac)
     from collections import defaultdict
-    buckets = defaultdict(lambda: {"hashrate": [], "power": []})
+    # per_dev_bucket[bucket_key][mac] = {"hashrate": [...], "power": [...]}
+    per_dev_bucket = defaultdict(lambda: defaultdict(lambda: {"hashrate": [], "power": []}))
     for s in snapshots:
         bucket = s.ts.replace(second=0, microsecond=0)
         bucket = bucket.replace(minute=(s.ts.minute // 10) * 10)
         key = bucket.strftime("%Y-%m-%dT%H:%M:%SZ")
-        if s.hashrate: buckets[key]["hashrate"].append(s.hashrate)
-        if s.power: buckets[key]["power"].append(s.power)
+        if s.hashrate is not None:
+            per_dev_bucket[key][s.mac]["hashrate"].append(s.hashrate)
+        if s.power is not None:
+            per_dev_bucket[key][s.mac]["power"].append(s.power)
 
     result = []
-    for ts_key in sorted(buckets.keys()):
-        b = buckets[ts_key]
-        hr = sum(b["hashrate"]) if b["hashrate"] else 0
-        pw = sum(b["power"]) if b["power"] else 0
-        eff = (pw / (hr / 1000)) if hr > 0 else 0
+    for ts_key in sorted(per_dev_bucket.keys()):
+        devs = per_dev_bucket[ts_key]
+        # For each device in this bucket, average its samples, then sum across devices
+        hr_total = 0.0
+        pw_total = 0.0
+        for mac, vals in devs.items():
+            if vals["hashrate"]:
+                hr_total += sum(vals["hashrate"]) / len(vals["hashrate"])
+            if vals["power"]:
+                pw_total += sum(vals["power"]) / len(vals["power"])
+        eff = (pw_total / (hr_total / 1000)) if hr_total > 0 else 0
         result.append({
             "ts": ts_key,
-            "hashrate_gh": round(hr, 2),
-            "power_w": round(pw, 2),
+            "hashrate_gh": round(hr_total, 2),
+            "power_w": round(pw_total, 2),
             "efficiency": round(eff, 2),
         })
     return result
