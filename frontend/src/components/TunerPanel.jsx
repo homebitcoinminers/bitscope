@@ -99,7 +99,8 @@ export default function TunerPanel({ mac, onChange }) {
   const [showSettings, setShowSettings] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [busy, setBusy] = useState(null)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState(null)          // from a button press; stays until the next action
+  const [loadError, setLoadError] = useState(null)  // from the 15 s refresh; clears when a refresh works
   const [saved, setSaved] = useState(false)
 
   const syncForm = (d) => {
@@ -114,7 +115,8 @@ export default function TunerPanel({ mac, onChange }) {
       setT(d)
       if (resetForm) syncForm(d)
       if (resetForm && d.missing_limits?.length) setShowSettings(true)
-    } catch (e) { setError(e.message) }
+      setLoadError(null)
+    } catch (e) { setLoadError(`Couldn't refresh (${e.message}). Retrying…`) }
   }, [mac])
 
   useEffect(() => { load(true) }, [load])
@@ -285,6 +287,7 @@ export default function TunerPanel({ mac, onChange }) {
         </div>
       )}
       {error && <div style={{ fontSize: 11, color: '#e24b4a', marginBottom: 6 }}>✗ {error}</div>}
+      {loadError && !error && <div style={{ fontSize: 11, color: theme.faint, marginBottom: 6 }}>{loadError}</div>}
 
       {/* Limits form */}
       {showSettings && (

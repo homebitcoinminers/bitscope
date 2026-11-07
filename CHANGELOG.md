@@ -1,5 +1,12 @@
 # BitScope Changelog
 
+## v0.9.1 - 2026-11-07
+
+### Fixed
+- Auto-tuner card: a single failed background refresh (e.g. a phone dropping signal) left "Failed to fetch" on screen permanently. Refresh errors now show as a quiet "Couldn't refresh, retrying" note that clears on the next successful refresh.
+
+---
+
 ## v0.9.0 - 2026-11-07 - Undervolt-first autotune
 
 Autotune now searches voltage as well as clock. The goal is the highest hashrate at safe temperatures with no errors, and since chip power rises with voltage squared, the lowest stable voltage is what buys the most clock within a temperature limit.
