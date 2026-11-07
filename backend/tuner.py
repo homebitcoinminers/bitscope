@@ -303,6 +303,43 @@ def build_ladder(cfg: TunerConfig, steps: list[TuneStep], limited_by: Optional[s
     return ladder, len(ladder) - 1
 
 
+def _why_not_higher(cfg: TunerConfig, steps: list[TuneStep], op_freq: int) -> Optional[str]:
+    """Plain-words reason the operating point sits below the next faster passing clock."""
+    best = _passing(steps)
+    higher = sorted(f for f in best if f > op_freq)
+    if not higher:
+        return None
+    f = higher[0]
+    s = best[f]
+    if any(x.stage == "soak" and x.frequency == f and x.result not in ("pass", "running") for x in steps):
+        return f"{f} MHz failed its soak test"
+    top = max(best)
+    if cfg.limited_by in EDGE_FOUND and f > top * (1 - cfg.margin_pct / 100.0):
+        return f"{f} MHz is within {cfg.margin_pct:g}% of the chip's stability edge ({top} MHz)"
+    hc = cfg.headroom_c or 0.0
+    if s.max_temp is not None and s.max_temp > cfg.temp_max - hc:
+        return (f"{f} MHz reached {s.max_temp:.1f}°C in its test, less than {hc:g}°C under "
+                f"your {cfg.temp_max:g}°C chip limit")
+    if s.max_vr_temp is not None and s.max_vr_temp > cfg.vr_temp_max - hc:
+        return (f"{f} MHz reached {s.max_vr_temp:.1f}°C VR in its test, less than {hc:g}°C under "
+                f"your {cfg.vr_temp_max:g}°C VR limit")
+    if s.avg_power is not None and s.avg_power > cfg.power_max_w * 0.95:
+        return (f"{f} MHz drew {s.avg_power:.0f} W in its test, over 95% of your {cfg.power_max_w:g} W "
+                f"power limit ({cfg.power_max_w * 0.95:.0f} W)")
+    return None
+
+
+def _op_is_tight(cfg: TunerConfig, steps: list[TuneStep], op_freq: int) -> bool:
+    """The operating point itself didn't meet the headroom rule (it was the lowest option)."""
+    s = _passing(steps).get(op_freq)
+    if not s:
+        return False
+    hc = cfg.headroom_c or 0.0
+    return ((s.max_temp is not None and s.max_temp > cfg.temp_max - hc)
+            or (s.max_vr_temp is not None and s.max_vr_temp > cfg.vr_temp_max - hc)
+            or (s.avg_power is not None and s.avg_power > cfg.power_max_w * 0.95))
+
+
 # ── Autotune ─────────────────────────────────────────────────────────────────
 #
 #   baseline  measure the current settings (this sets "expected hashrate per MHz")
@@ -458,14 +495,21 @@ async def _complete(db: Session, cfg: TunerConfig, dev: Device):
     cfg.test_freq = cfg.test_voltage = cfg.test_started_at = None
     floor = (f" Voltage floor at {cfg.baseline_freq} MHz: {cfg.floor_voltage} mV "
              f"(was {cfg.baseline_voltage})." if cfg.floor_voltage and cfg.floor_voltage < cfg.baseline_voltage else "")
+    steps = _run_steps(db, cfg)
+    why = _why_not_higher(cfg, steps, op["freq"])
+    because = f", not higher, because {why}" if why else ""
+    tight = (f" {op['freq']} MHz is also close to your limits (it was the lowest option), so the governor "
+             f"may step it down on a warm day." if _op_is_tight(cfg, steps, op["freq"]) else "")
     cfg.status_msg = (f"Autotune done: max stable {cfg.max_stable_freq} MHz @ {cfg.max_stable_voltage} mV "
-                      f"({cfg.limit_detail}).{floor} Running at {op['freq']} MHz @ {op['voltage']} mV.")
+                      f"({cfg.limit_detail}).{floor} Running at {op['freq']} MHz @ {op['voltage']} mV"
+                      f"{because}.{tight}")
     db.add(cfg)
     db.commit()
     await _request(db, cfg, dev, op["freq"], op["voltage"], "autotune complete, operating point")
     a = _log(db, cfg.mac,
              f"Tuner: autotune complete. Max stable {cfg.max_stable_freq} MHz @ {cfg.max_stable_voltage} mV, "
-             f"limited by {cfg.limited_by}.{floor} Operating at {op['freq']} MHz @ {op['voltage']} mV",
+             f"limited by {cfg.limited_by}.{floor} Operating at {op['freq']} MHz @ {op['voltage']} mV"
+             f"{because}.{tight}",
              kind="tuner")
     await _discord(a, cfg.mac)
 

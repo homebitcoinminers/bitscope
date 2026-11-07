@@ -1,5 +1,12 @@
 # BitScope Changelog
 
+## v0.9.2 - 2026-11-07
+
+### Changed
+- Autotune's completion message (card, activity log and Discord) now says why it's running below max stable, e.g. "Running at 735 MHz @ 1150 mV, not higher, because 760 MHz drew 113 W in its test, over 95% of your 115 W power limit (109 W)". If the chosen point itself is close to a limit (it was the lowest option), it says the governor may step it down on a warm day.
+
+---
+
 ## v0.9.1 - 2026-11-07
 
 ### Fixed

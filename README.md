@@ -2,7 +2,7 @@
 
 Fleet management, monitoring, and QA tool for home Bitcoin miners running AxeOS — Bitaxe, NerdQAxe++, NerdOCTAxe, and compatible devices.
 
-**Current version: v0.9.1** — see [CHANGELOG.md](CHANGELOG.md) for full history.
+**Current version: v0.9.2** — see [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ---
 
