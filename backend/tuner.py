@@ -46,7 +46,7 @@ LIMIT_LABELS = {
     "freq_max_mhz": "Max frequency",
     "voltage_max_mv": "Max core voltage",
 }
-EDITABLE = REQUIRED_LIMITS + (
+EDITABLE = REQUIRED_LIMITS + ("voltage_min_mv", "soak_minutes", "headroom_c",
     "freq_min_mhz", "margin_pct", "voltage_margin_mv", "step_mhz", "voltage_step_mv",
     "warmup_minutes", "settle_minutes", "hysteresis_c", "up_hold_minutes",
     "min_hashrate_ratio", "max_hw_nonces_per_step", "max_error_pct",
@@ -168,6 +168,23 @@ async def _request(db: Session, cfg: TunerConfig, dev: Device, freq: int, voltag
     return ok
 
 
+async def _device_limits(dev: Device) -> dict:
+    """absMaxFrequency / absMaxVoltage / defaults from the device's /api/system/asic.
+    Best effort: an empty dict if it doesn't answer."""
+    if not dev.last_ip:
+        return {}
+    try:
+        async with aiohttp.ClientSession() as http:
+            async with http.get(f"http://{dev.last_ip}/api/system/asic",
+                                timeout=aiohttp.ClientTimeout(total=5)) as r:
+                if r.status == 200:
+                    d = await r.json(content_type=None)
+                    return d if isinstance(d, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+
 # ── Measurement ──────────────────────────────────────────────────────────────
 
 def evaluate(cfg: TunerConfig, snaps: list[MetricSnapshot], freq: int) -> dict:
@@ -205,13 +222,14 @@ def evaluate(cfg: TunerConfig, snaps: list[MetricSnapshot], freq: int) -> dict:
     }
 
 
-def judge(cfg: TunerConfig, ev: dict, is_baseline: bool) -> tuple[bool, Optional[str]]:
+def judge(cfg: TunerConfig, ev: dict, is_baseline: bool, nonce_allowance: Optional[int] = None) -> tuple[bool, Optional[str]]:
+    allowed = cfg.max_hw_nonces_per_step if nonce_allowance is None else nonce_allowance
     if ev["rebooted"]:
         return False, "device rebooted during the test"
     if not ev["avg_hashrate"]:
         return False, "no hashrate reported"
-    if ev["hw_nonces"] > cfg.max_hw_nonces_per_step:
-        return False, f"{ev['hw_nonces']} HW nonces (allowed {cfg.max_hw_nonces_per_step})"
+    if ev["hw_nonces"] > allowed:
+        return False, f"{ev['hw_nonces']} HW nonces (allowed {allowed})"
     if ev["error_pct"] is not None and ev["error_pct"] > cfg.max_error_pct:
         return False, f"error rate {ev['error_pct']:.2f}% (allowed {cfg.max_error_pct:g}%)"
     if not is_baseline and ev["hashrate_ratio"] is not None and ev["hashrate_ratio"] < cfg.min_hashrate_ratio:
@@ -222,37 +240,58 @@ def judge(cfg: TunerConfig, ev: dict, is_baseline: bool) -> tuple[bool, Optional
 
 # ── Ladder ───────────────────────────────────────────────────────────────────
 
+# Margin below the top clock only makes sense when the run actually found the
+# chip's stability edge. Temperature, power and your own cap end the run before that.
+EDGE_FOUND = ("stability", "voltage_cap", "step_limit", "error")
+
+
+def _passing(steps: list[TuneStep]) -> dict[int, TuneStep]:
+    """Per clock, the lowest-voltage search step that passed (soak steps excluded)."""
+    best: dict[int, TuneStep] = {}
+    for s in steps:
+        if s.result == "pass" and s.stage != "soak":
+            cur = best.get(s.frequency)
+            if cur is None or s.core_voltage < cur.core_voltage:
+                best[s.frequency] = s
+    return best
+
+
 def build_ladder(cfg: TunerConfig, steps: list[TuneStep], limited_by: Optional[str] = None) -> tuple[list[dict], int]:
-    """Validated points ≤ the operating point, plus untested lower fallbacks.
+    """Validated rungs up to the operating point, plus untested lower fallbacks.
     Returns (ladder low→high, op_index).
 
-    The frequency margin backs off from the chip's real edge. If the run stopped at
-    the user's own frequency cap, that edge was never reached, so the cap itself is
-    the operating point (it still gets the extra voltage margin)."""
-    passing = {}
-    for s in steps:
-        if s.result == "pass":
-            if s.frequency not in passing or s.core_voltage < passing[s.frequency]:
-                passing[s.frequency] = s.core_voltage
-    freqs = sorted(passing)
+    Each tested rung runs at the lowest voltage that passed at that clock, plus
+    voltage_margin_mv. The operating point is the fastest rung that:
+      - sits margin_pct under the top clock, if the run found the chip's stability edge
+      - ran at least headroom_c under both temp limits, and under 95% of the power
+        limit, during its test, so a normal warm day doesn't trip the governor at once.
+    """
+    best = _passing(steps)
+    freqs = sorted(best)
     top = freqs[-1]
-    if limited_by == "freq_cap":
-        op_freq = top
-    else:
+    if limited_by in EDGE_FOUND:
         target = top * (1 - cfg.margin_pct / 100.0)
-        op_freq = max([f for f in freqs if f <= target], default=freqs[0])
+        allowed = [f for f in freqs if f <= target] or [freqs[0]]
+    else:
+        allowed = freqs
 
-    ladder = []
-    for f in freqs:
-        if f > op_freq:
-            continue
-        v = passing[f]
-        if f != cfg.baseline_freq:
-            v = min(v + cfg.voltage_margin_mv, cfg.voltage_max_mv or v + cfg.voltage_margin_mv)
-        ladder.append({"freq": f, "voltage": v, "tested": True})
+    hc = cfg.headroom_c or 0.0
 
-    # Fallback rungs below the lowest tested point: same voltage, lower clock —
-    # always at least as stable, and cooler. Lets the governor ride out heatwaves.
+    def fits(f: int) -> bool:
+        s = best[f]
+        return ((s.max_temp is None or s.max_temp <= cfg.temp_max - hc)
+                and (s.max_vr_temp is None or s.max_vr_temp <= cfg.vr_temp_max - hc)
+                and (s.avg_power is None or s.avg_power <= cfg.power_max_w * 0.95))
+
+    cool = [f for f in allowed if fits(f)]
+    op_freq = max(cool) if cool else min(allowed)
+
+    vmax = cfg.voltage_max_mv or 10_000
+    ladder = [{"freq": f, "voltage": min(best[f].core_voltage + cfg.voltage_margin_mv, vmax), "tested": True}
+              for f in freqs if f <= op_freq]
+
+    # Fallback rungs below the lowest tested point: same voltage, lower clock. Always
+    # at least as stable, and cooler. Lets the governor ride out heatwaves.
     lowest = ladder[0]
     floor = cfg.freq_min_mhz or (lowest["freq"] - 4 * cfg.step_mhz)
     f = lowest["freq"] - cfg.step_mhz
@@ -265,12 +304,47 @@ def build_ladder(cfg: TunerConfig, steps: list[TuneStep], limited_by: Optional[s
 
 
 # ── Autotune ─────────────────────────────────────────────────────────────────
+#
+#   baseline  measure the current settings (this sets "expected hashrate per MHz")
+#   floor     binary-search the lowest voltage that holds at the baseline clock
+#   climb     +step MHz at a time, starting each clock at the previous clock's minimum
+#             voltage and adding voltage_step_mv only when a step fails
+#   soak      run the chosen operating point for soak_minutes to confirm it
+#
+STAGE_LABEL = {
+    "baseline": "Measuring baseline",
+    "floor": "Finding voltage floor",
+    "climb": "Raising clock",
+    "soak": "Soak test",
+}
+
+
+def _step_minutes(cfg: TunerConfig, stage: Optional[str]) -> int:
+    return cfg.warmup_minutes + (cfg.soak_minutes if stage == "soak" else cfg.settle_minutes)
+
+
+def _safe_point(cfg: TunerConfig) -> tuple[Optional[int], Optional[int]]:
+    """Where to put the device if the run is aborted or interrupted."""
+    lad = get_ladder(cfg)
+    if cfg.stage == "soak" and lad and cfg.op_index is not None:
+        r = lad[cfg.op_index]
+        return r["freq"], r["voltage"]
+    if cfg.stage == "climb" and cfg.pass_freq and cfg.pass_voltage:
+        return cfg.pass_freq, min(cfg.pass_voltage + cfg.voltage_margin_mv, cfg.voltage_max_mv or 10_000)
+    # baseline / floor: the settings the user started with
+    return cfg.baseline_freq, cfg.baseline_voltage
+
 
 def _open_step(db: Session, cfg: TunerConfig) -> Optional[TuneStep]:
     return db.exec(
         select(TuneStep).where(TuneStep.mac == cfg.mac, TuneStep.run_id == cfg.last_run_id,
                                TuneStep.result == "running")
     ).first()
+
+
+def _run_steps(db: Session, cfg: TunerConfig) -> list[TuneStep]:
+    return db.exec(select(TuneStep).where(TuneStep.mac == cfg.mac, TuneStep.run_id == cfg.last_run_id)
+                   .order_by(TuneStep.id)).all()
 
 
 def _close_step(db: Session, step: Optional[TuneStep], result: str, reason: Optional[str], ev: Optional[dict] = None):
@@ -285,61 +359,138 @@ def _close_step(db: Session, step: Optional[TuneStep], result: str, reason: Opti
     db.commit()
 
 
-async def _start_test(db: Session, cfg: TunerConfig, dev: Device, freq: int, voltage: int, apply: bool = True):
+async def _start_test(db: Session, cfg: TunerConfig, dev: Device, freq: int, voltage: int,
+                      stage: str, apply: bool = True):
     n = db.exec(select(func.count()).select_from(TuneStep)
                 .where(TuneStep.mac == cfg.mac, TuneStep.run_id == cfg.last_run_id)).one()
-    if n >= MAX_STEPS_PER_RUN:
-        await _finish_autotune(db, cfg, dev, "step_limit", f"stopped after {n} steps")
+    if n >= MAX_STEPS_PER_RUN and stage != "soak":
+        await _end_search(db, cfg, dev, "step_limit", f"stopped after {n} steps")
         return
+    cfg.stage = stage
     cfg.test_freq, cfg.test_voltage, cfg.test_started_at = freq, voltage, _now()
-    db.add(TuneStep(mac=cfg.mac, run_id=cfg.last_run_id, frequency=freq,
+    db.add(TuneStep(mac=cfg.mac, run_id=cfg.last_run_id, stage=stage, frequency=freq,
                     core_voltage=voltage, started_at=cfg.test_started_at))
-    total = cfg.warmup_minutes + cfg.settle_minutes
-    cfg.status_msg = f"Testing {freq} MHz @ {voltage} mV (0/{total} min)"
+    cfg.status_msg = f"{STAGE_LABEL[stage]}: {freq} MHz @ {voltage} mV (0/{_step_minutes(cfg, stage)} min)"
     db.add(cfg)
     db.commit()
     if apply:
-        await _request(db, cfg, dev, freq, voltage, "autotune test")
+        await _request(db, cfg, dev, freq, voltage, f"autotune {stage}")
 
 
-async def _finish_autotune(db: Session, cfg: TunerConfig, dev: Device, limited_by: str, detail: str):
-    steps = db.exec(select(TuneStep).where(TuneStep.mac == cfg.mac, TuneStep.run_id == cfg.last_run_id)).all()
-    if not any(s.result == "pass" for s in steps):
+async def _next_floor_or_climb(db: Session, cfg: TunerConfig, dev: Device):
+    """Binary search between the highest known failing voltage and the lowest known
+    passing one, on a voltage_step_mv grid. When they're adjacent, the floor is found."""
+    lo = cfg.floor_fail_mv            # fails (or the virtual point just under the floor setting)
+    hi = cfg.floor_voltage            # passes
+    step = cfg.voltage_step_mv
+    gap = (hi - lo) // step
+    if gap > 1:
+        await _start_test(db, cfg, dev, cfg.baseline_freq, lo + step * (gap // 2), "floor")
+        return
+    _log(db, cfg.mac, f"Tuner: voltage floor at {cfg.baseline_freq} MHz is {hi} mV "
+                      f"(started at {cfg.baseline_voltage} mV)", kind="tuner")
+    cfg.pass_freq, cfg.pass_voltage = cfg.baseline_freq, hi
+    await _next_climb(db, cfg, dev)
+
+
+async def _next_climb(db: Session, cfg: TunerConfig, dev: Device):
+    if cfg.pass_freq >= cfg.freq_max_mhz:
+        await _end_search(db, cfg, dev, "freq_cap", f"stable at your {cfg.freq_max_mhz} MHz cap")
+        return
+    # Last step lands exactly on the cap (e.g. 725 → 735 with 25 MHz steps)
+    nxt = min(cfg.pass_freq + cfg.step_mhz, cfg.freq_max_mhz)
+    await _start_test(db, cfg, dev, nxt, cfg.pass_voltage, "climb")
+
+
+async def _end_search(db: Session, cfg: TunerConfig, dev: Device, limited_by: str, detail: str):
+    """Search is over: pick the operating point and soak it (or finish straight away)."""
+    steps = _run_steps(db, cfg)
+    if not _passing(steps):
         cfg.phase = "idle"
-        cfg.status_msg = f"Autotune stopped: {detail}. No point passed — baseline restored."
+        cfg.stage = None
+        cfg.status_msg = f"Autotune stopped: {detail}. No point passed, so the baseline was restored."
         if cfg.baseline_freq and cfg.baseline_voltage:
             await _request(db, cfg, dev, cfg.baseline_freq, cfg.baseline_voltage, "autotune failed, restoring baseline")
-        a = _log(db, cfg.mac, f"Tuner: autotune failed — {detail}", kind="tuner")
+        a = _log(db, cfg.mac, f"Tuner: autotune failed: {detail}", kind="tuner")
         await _discord(a, cfg.mac)
         return
 
     ladder, op_idx = build_ladder(cfg, steps, limited_by)
-    top = max((s for s in steps if s.result == "pass"), key=lambda s: s.frequency)
+    best = _passing(steps)
+    top = best[max(best)]
     cfg.max_stable_freq, cfg.max_stable_voltage = top.frequency, top.core_voltage
     cfg.limited_by = limited_by
+    cfg.limit_detail = detail
     cfg.ladder = json.dumps(ladder)
-    cfg.op_index = op_idx
-    cfg.current_index = op_idx
-    cfg.test_freq = cfg.test_voltage = cfg.test_started_at = None
-    op = ladder[op_idx]
+    cfg.op_index = cfg.current_index = op_idx
+    cfg.soak_tries = 0
+    db.add(cfg)
+    db.commit()
+    if cfg.soak_minutes and cfg.soak_minutes > 0:
+        op = ladder[op_idx]
+        await _start_test(db, cfg, dev, op["freq"], op["voltage"], "soak")
+    else:
+        await _complete(db, cfg, dev)
+
+
+async def _soak_failed(db: Session, cfg: TunerConfig, dev: Device, reason: str):
+    """Chosen point didn't hold for the full soak: one rung down and soak again."""
+    lad = get_ladder(cfg)
+    cfg.soak_tries = (cfg.soak_tries or 0) + 1
+    if cfg.op_index > 0:
+        cfg.op_index -= 1
+        cfg.current_index = cfg.op_index
+    r = lad[cfg.op_index]
+    _log(db, cfg.mac, f"Tuner: soak failed ({reason}); trying {r['freq']} MHz @ {r['voltage']} mV", kind="tuner")
+    if cfg.soak_tries >= 3 or cfg.op_index == 0:
+        cfg.limit_detail = (cfg.limit_detail or "") + f"; soak failed {cfg.soak_tries}× ({reason})"
+        await _complete(db, cfg, dev)
+        return
+    await _start_test(db, cfg, dev, r["freq"], r["voltage"], "soak")
+
+
+async def _complete(db: Session, cfg: TunerConfig, dev: Device):
+    lad = get_ladder(cfg)
+    op = lad[cfg.op_index]
+    cfg.current_index = cfg.op_index
     cfg.phase = "governor" if cfg.govern_after else "idle"
-    cfg.status_msg = (f"Autotune done: max stable {top.frequency} MHz @ {top.core_voltage} mV "
-                      f"({detail}). Running at {op['freq']} MHz @ {op['voltage']} mV.")
+    cfg.stage = None
+    cfg.test_freq = cfg.test_voltage = cfg.test_started_at = None
+    floor = (f" Voltage floor at {cfg.baseline_freq} MHz: {cfg.floor_voltage} mV "
+             f"(was {cfg.baseline_voltage})." if cfg.floor_voltage and cfg.floor_voltage < cfg.baseline_voltage else "")
+    cfg.status_msg = (f"Autotune done: max stable {cfg.max_stable_freq} MHz @ {cfg.max_stable_voltage} mV "
+                      f"({cfg.limit_detail}).{floor} Running at {op['freq']} MHz @ {op['voltage']} mV.")
     db.add(cfg)
     db.commit()
     await _request(db, cfg, dev, op["freq"], op["voltage"], "autotune complete, operating point")
     a = _log(db, cfg.mac,
-             f"Tuner: autotune complete — max stable {top.frequency} MHz @ {top.core_voltage} mV, "
-             f"limited by {limited_by}; operating at {op['freq']} MHz @ {op['voltage']} mV",
+             f"Tuner: autotune complete. Max stable {cfg.max_stable_freq} MHz @ {cfg.max_stable_voltage} mV, "
+             f"limited by {cfg.limited_by}.{floor} Operating at {op['freq']} MHz @ {op['voltage']} mV",
              kind="tuner")
     await _discord(a, cfg.mac)
 
 
+async def _abort(db: Session, cfg: TunerConfig, dev: Device, msg: str, notify: bool = True):
+    f, v = _safe_point(cfg)
+    cfg.phase = "idle"
+    cfg.stage = None
+    cfg.test_freq = cfg.test_started_at = None
+    cfg.status_msg = msg
+    db.add(cfg)
+    db.commit()
+    if f and v:
+        await _request(db, cfg, dev, f, v, "autotune aborted, safe point")
+    a = _log(db, cfg.mac, f"Tuner: {msg}", kind="tuner")
+    if notify:
+        await _discord(a, cfg.mac)
+
+
 async def _tick_autotune(db: Session, cfg: TunerConfig, dev: Device):
     now = _now()
+    stage = cfg.stage or "climb"
     step = _open_step(db, cfg)
     if not step or not cfg.test_started_at:
-        await _finish_autotune(db, cfg, dev, "error", "lost track of the test step")
+        await _end_search(db, cfg, dev, "error", "lost track of the test step")
         return
     snap = _latest(db, cfg.mac)
 
@@ -351,7 +502,7 @@ async def _tick_autotune(db: Session, cfg: TunerConfig, dev: Device):
     if not _fresh(snap):
         if (now - cfg.test_started_at).total_seconds() > OFFLINE_FAIL_MINUTES * 60:
             _close_step(db, step, "fail", "device stopped responding")
-            await _after_fail(db, cfg, dev, step)
+            await _on_fail(db, cfg, dev, step, "device stopped responding")
         return
 
     # Hard limits are checked on every tick, not just at the end of a window.
@@ -360,7 +511,10 @@ async def _tick_autotune(db: Session, cfg: TunerConfig, dev: Device):
         kind, reason = over
         _close_step(db, step, kind, reason)
         cfg.test_freq = None
-        await _finish_autotune(db, cfg, dev, kind, reason)
+        if stage == "soak":
+            await _soak_failed(db, cfg, dev, reason)
+        else:
+            await _end_search(db, cfg, dev, kind, reason)
         return
 
     # Did the device take the setting? (Give it one poll after the change.)
@@ -368,20 +522,25 @@ async def _tick_autotune(db: Session, cfg: TunerConfig, dev: Device):
         f, v = _i(snap.frequency), _i(snap.core_voltage)
         if f is not None and f != cfg.test_freq:
             _close_step(db, step, "aborted", f"device reports {f} MHz, not {cfg.test_freq}")
-            cfg.phase = "idle"
-            cfg.status_msg = (f"Autotune aborted: device didn't accept {cfg.test_freq} MHz (reports {f}). "
-                              f"It may only allow specific frequency values.")
-            if cfg.pass_freq:
-                await _request(db, cfg, dev, cfg.pass_freq, cfg.pass_voltage, "autotune aborted, last good point")
-            a = _log(db, cfg.mac, f"Tuner: {cfg.status_msg}", kind="tuner")
-            await _discord(a, cfg.mac)
+            await _abort(db, cfg, dev, f"Autotune aborted: device didn't accept {cfg.test_freq} MHz (reports {f}). "
+                                       f"It may only allow specific frequency values.")
+            return
+        if v is not None and v != cfg.test_voltage:
+            if stage == "floor":
+                # Firmware refused a voltage this low (NerdQAxe++ won't go under 1050 mV).
+                _close_step(db, step, "aborted", f"device refused {cfg.test_voltage} mV (reports {v})")
+                cfg.floor_fail_mv = cfg.test_voltage
+                await _next_floor_or_climb(db, cfg, dev)
+                return
+            _close_step(db, step, "aborted", f"device reports {v} mV, not {cfg.test_voltage}")
+            await _abort(db, cfg, dev, f"Autotune aborted: device didn't accept {cfg.test_voltage} mV (reports {v}).")
             return
 
     elapsed_min = (now - cfg.test_started_at).total_seconds() / 60
-    total = cfg.warmup_minutes + cfg.settle_minutes
+    total = _step_minutes(cfg, stage)
     if elapsed_min < total:
-        cfg.status_msg = (f"Testing {cfg.test_freq} MHz @ {cfg.test_voltage} mV "
-                          f"({int(elapsed_min)}/{total} min) — chip {snap.temp or 0:.1f}°C, "
+        cfg.status_msg = (f"{STAGE_LABEL[stage]}: {cfg.test_freq} MHz @ {cfg.test_voltage} mV "
+                          f"({int(elapsed_min)}/{total} min). Chip {snap.temp or 0:.1f}°C, "
                           f"VR {snap.vr_temp or 0:.1f}°C, {snap.power or 0:.0f} W")
         db.add(cfg)
         db.commit()
@@ -391,45 +550,55 @@ async def _tick_autotune(db: Session, cfg: TunerConfig, dev: Device):
     if len(window) < 5 and elapsed_min < total * 2:
         return  # polls were patchy; wait a bit longer for enough samples
     ev = evaluate(cfg, window, cfg.test_freq)
-    is_baseline = cfg.pass_freq is None
-    ok, why = judge(cfg, ev, is_baseline)
+    measured = total - cfg.warmup_minutes
+    allowance = max(cfg.max_hw_nonces_per_step,
+                    round(cfg.max_hw_nonces_per_step * measured / max(1, cfg.settle_minutes) / 2))
+    ok, why = judge(cfg, ev, stage == "baseline", allowance)
 
-    if ok:
-        if is_baseline:
-            cfg.baseline_hr_per_mhz = ev["avg_hashrate"] / cfg.test_freq
-            ev["hashrate_ratio"] = 1.0
-        _close_step(db, step, "pass", None, ev)
-        cfg.pass_freq, cfg.pass_voltage = cfg.test_freq, cfg.test_voltage
-        if cfg.test_freq >= cfg.freq_max_mhz:
-            await _finish_autotune(db, cfg, dev, "freq_cap", f"stable at your {cfg.freq_max_mhz} MHz cap")
-            return
-        # Last step lands exactly on the cap (e.g. 725 → 735 with 25 MHz steps)
-        nxt = min(cfg.test_freq + cfg.step_mhz, cfg.freq_max_mhz)
-        await _start_test(db, cfg, dev, nxt, cfg.test_voltage)
+    if not ok:
+        _close_step(db, step, "fail", why, ev)
+        await _on_fail(db, cfg, dev, step, why)
         return
 
-    _close_step(db, step, "fail", why, ev)
-    if is_baseline:
-        cfg.phase = "idle"
-        cfg.status_msg = (f"Autotune stopped: your current settings ({cfg.test_freq} MHz @ "
-                          f"{cfg.test_voltage} mV) aren't stable — {why}. Fix that before tuning.")
-        a = _log(db, cfg.mac, f"Tuner: {cfg.status_msg}", kind="tuner")
-        await _discord(a, cfg.mac)
+    if stage == "baseline":
+        cfg.baseline_hr_per_mhz = ev["avg_hashrate"] / cfg.test_freq
+        ev["hashrate_ratio"] = 1.0
+    _close_step(db, step, "pass", None, ev)
+
+    if stage == "soak":
+        await _complete(db, cfg, dev)
         return
-    await _after_fail(db, cfg, dev, step)
+    if stage in ("baseline", "floor"):
+        cfg.floor_voltage = cfg.test_voltage
+        if stage == "baseline":
+            cfg.floor_fail_mv = (cfg.voltage_min_mv or 1050) - cfg.voltage_step_mv
+        await _next_floor_or_climb(db, cfg, dev)
+        return
+    # climb
+    cfg.pass_freq, cfg.pass_voltage = cfg.test_freq, cfg.test_voltage
+    await _next_climb(db, cfg, dev)
 
 
-async def _after_fail(db: Session, cfg: TunerConfig, dev: Device, step: TuneStep):
-    """A non-baseline point failed on stability: add voltage, or stop if capped."""
-    if cfg.pass_freq is None:
-        await _finish_autotune(db, cfg, dev, "stability", f"baseline failed: {step.reason}")
+async def _on_fail(db: Session, cfg: TunerConfig, dev: Device, step: TuneStep, why: str):
+    stage = step.stage or cfg.stage
+    if stage == "baseline":
+        await _abort(db, cfg, dev, f"Autotune stopped: your current settings ({step.frequency} MHz @ "
+                                   f"{step.core_voltage} mV) aren't stable ({why}). Fix that before tuning.")
         return
+    if stage == "floor":
+        cfg.floor_fail_mv = step.core_voltage
+        await _next_floor_or_climb(db, cfg, dev)
+        return
+    if stage == "soak":
+        await _soak_failed(db, cfg, dev, why)
+        return
+    # climb: more voltage at the same clock, unless that's past the cap
     nv = step.core_voltage + cfg.voltage_step_mv
     if nv > cfg.voltage_max_mv:
-        await _finish_autotune(db, cfg, dev, "voltage_cap",
-                               f"{step.frequency} MHz unstable even at your {cfg.voltage_max_mv} mV cap")
+        await _end_search(db, cfg, dev, "voltage_cap",
+                          f"{step.frequency} MHz unstable even at your {cfg.voltage_max_mv} mV cap")
         return
-    await _start_test(db, cfg, dev, step.frequency, nv)
+    await _start_test(db, cfg, dev, step.frequency, nv, "climb")
 
 
 # ── Governor ─────────────────────────────────────────────────────────────────
@@ -599,11 +768,19 @@ def recover_on_startup():
         for cfg in db.exec(select(TunerConfig).where(TunerConfig.phase == "autotune")).all():
             step = _open_step(db, cfg)
             _close_step(db, step, "aborted", "BitScope restarted during the test")
-            f = cfg.pass_freq or cfg.baseline_freq
-            v = cfg.pass_voltage or cfg.baseline_voltage
-            cfg.phase = "idle"
+            f, v = _safe_point(cfg)
+            if cfg.stage == "soak" and get_ladder(cfg):
+                # Search finished; only the confirmation run was cut short.
+                cfg.phase = "governor" if cfg.govern_after else "idle"
+                cfg.current_index = cfg.op_index
+                cfg.status_msg = (f"Soak test interrupted by a BitScope restart. Running the chosen point "
+                                  f"({f} MHz @ {v} mV) without the full soak; the governor's stability "
+                                  f"watchdog will still step down if it misbehaves.")
+            else:
+                cfg.phase = "idle"
+                cfg.status_msg = "Autotune interrupted by a BitScope restart. Returned to a known-good point."
+            cfg.stage = None
             cfg.test_freq = cfg.test_started_at = None
-            cfg.status_msg = "Autotune interrupted by a BitScope restart — returned to the last good point."
             if f and v:
                 cfg.expect_freq, cfg.expect_voltage, cfg.pending_apply = f, v, True
             db.add(cfg)
@@ -663,9 +840,15 @@ def _serialize(db: Session, cfg: TunerConfig, dev: Device) -> dict:
                         .order_by(TuneStep.started_at.asc())).all()
     factory = db.exec(select(HardwareSnapshot).where(HardwareSnapshot.mac == dev.mac,
                                                      HardwareSnapshot.label == "factory")).first()
-    est_steps = None
-    if cfg.freq_max_mhz and snap and snap.frequency:
-        est_steps = max(1, (cfg.freq_max_mhz - _i(snap.frequency)) // max(1, cfg.step_mhz) + 1)
+    est_steps = est_minutes = None
+    if cfg.freq_max_mhz and snap and snap.frequency and snap.core_voltage:
+        f0, v0 = _i(snap.frequency), _i(snap.core_voltage)
+        climb = max(0, -(-(cfg.freq_max_mhz - f0) // max(1, cfg.step_mhz)))
+        span = max(0, (v0 - (cfg.voltage_min_mv or 1050)) // max(1, cfg.voltage_step_mv) + 1)
+        floor_tests = span.bit_length()   # binary search
+        est_steps = 1 + floor_tests + climb * 2   # climb steps often need a voltage retry
+        est_minutes = est_steps * (cfg.warmup_minutes + cfg.settle_minutes) + (
+            cfg.warmup_minutes + cfg.soak_minutes if cfg.soak_minutes else 0)
     data = cfg.model_dump()
     data.update({
         "ladder": get_ladder(cfg),
@@ -674,6 +857,7 @@ def _serialize(db: Session, cfg: TunerConfig, dev: Device) -> dict:
         "steps": [s.model_dump() for s in steps],
         "estimated_minutes_per_step": cfg.warmup_minutes + cfg.settle_minutes,
         "estimated_steps": est_steps,
+        "estimated_minutes": est_minutes,
         "factory": {"frequency": factory.frequency, "core_voltage": factory.core_voltage} if factory else None,
         "live": {
             "online": _fresh(snap),
@@ -770,7 +954,8 @@ def tuner_settings(mac: str, body: dict):
                 raise HTTPException(400, "Hashrate ratio must be between 0.5 and 1.0")
             if k in ("step_mhz", "voltage_step_mv", "settle_minutes") and val < 1:
                 raise HTTPException(400, f"{k} must be at least 1")
-            int_fields = {"freq_max_mhz", "voltage_max_mv", "freq_min_mhz", "voltage_margin_mv", "step_mhz",
+            int_fields = {"freq_max_mhz", "voltage_max_mv", "voltage_min_mv", "soak_minutes",
+                          "freq_min_mhz", "voltage_margin_mv", "step_mhz",
                           "voltage_step_mv", "warmup_minutes", "settle_minutes", "up_hold_minutes",
                           "max_hw_nonces_per_step"}
             setattr(cfg, k, int(val) if k in int_fields else val)
@@ -806,6 +991,15 @@ async def tuner_autotune(mac: str, body: dict | None = None):
             raise HTTPException(409, "Device isn't reporting frequency/voltage")
         if f > cfg.freq_max_mhz or v > cfg.voltage_max_mv:
             raise HTTPException(400, f"Device is already at {f} MHz @ {v} mV, above your caps")
+        fw = await _device_limits(dev)
+        if fw.get("absMaxFrequency") and cfg.freq_max_mhz > fw["absMaxFrequency"]:
+            raise HTTPException(400, f"This board's firmware won't go above {fw['absMaxFrequency']} MHz. "
+                                     f"Set Max frequency to {fw['absMaxFrequency']} or lower.")
+        if fw.get("absMaxVoltage") and cfg.voltage_max_mv > fw["absMaxVoltage"]:
+            raise HTTPException(400, f"This board's firmware won't go above {fw['absMaxVoltage']} mV. "
+                                     f"Set Max core voltage to {fw['absMaxVoltage']} or lower.")
+        if (cfg.voltage_min_mv or 0) >= cfg.voltage_max_mv:
+            raise HTTPException(400, "Min core voltage must be below Max core voltage")
         over = _over_limits(cfg, snap, slack=2)
         if over:
             raise HTTPException(409, f"No headroom to test: {over[1].replace('reached', 'is within 2 of')}. "
@@ -816,6 +1010,9 @@ async def tuner_autotune(mac: str, body: dict | None = None):
         cfg.baseline_freq, cfg.baseline_voltage = f, v
         cfg.baseline_hr_per_mhz = None
         cfg.pass_freq = cfg.pass_voltage = None
+        cfg.floor_voltage = cfg.floor_fail_mv = None
+        cfg.limit_detail = None
+        cfg.soak_tries = 0
         cfg.expect_freq, cfg.expect_voltage = f, v
         cfg.last_change_at = _now()
         cfg.pending_apply = False
@@ -824,11 +1021,11 @@ async def tuner_autotune(mac: str, body: dict | None = None):
         db.add(cfg)
         db.commit()
         _log(db, dev.mac, f"Tuner: autotune started from {f} MHz @ {v} mV "
-                          f"(caps {cfg.freq_max_mhz} MHz / {cfg.voltage_max_mv} mV, "
+                          f"(caps {cfg.freq_max_mhz} MHz / {cfg.voltage_min_mv}-{cfg.voltage_max_mv} mV, "
                           f"limits {cfg.temp_max:g}°C chip / {cfg.vr_temp_max:g}°C VR / {cfg.power_max_w:g} W)",
              kind="tuner")
         # First test is the baseline itself — no change needed, just measure it.
-        await _start_test(db, cfg, dev, f, v, apply=False)
+        await _start_test(db, cfg, dev, f, v, "baseline", apply=False)
         return _serialize(db, cfg, dev)
 
 
@@ -840,16 +1037,7 @@ async def tuner_abort(mac: str):
         if cfg.phase != "autotune":
             raise HTTPException(409, "Autotune isn't running")
         _close_step(db, _open_step(db, cfg), "aborted", "aborted by user")
-        cfg.phase = "idle"
-        cfg.test_freq = cfg.test_started_at = None
-        cfg.status_msg = "Autotune aborted — returned to the last good point."
-        f = cfg.pass_freq or cfg.baseline_freq
-        v = cfg.pass_voltage or cfg.baseline_voltage
-        db.add(cfg)
-        db.commit()
-        if f and v:
-            await _request(db, cfg, dev, f, v, "autotune aborted, last good point")
-        _log(db, dev.mac, "Tuner: autotune aborted by user", kind="tuner")
+        await _abort(db, cfg, dev, "Autotune aborted by you. Returned to a known-good point.", notify=False)
         return _serialize(db, cfg, dev)
 
 

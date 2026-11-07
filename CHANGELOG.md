@@ -1,5 +1,25 @@
 # BitScope Changelog
 
+## v0.9.0 - 2026-11-07 - Undervolt-first autotune
+
+Autotune now searches voltage as well as clock. The goal is the highest hashrate at safe temperatures with no errors, and since chip power rises with voltage squared, the lowest stable voltage is what buys the most clock within a temperature limit.
+
+### How autotune works now
+1. **Baseline:** measures the current settings.
+2. **Voltage floor:** binary-searches the lowest voltage that holds at the current clock (about 4 tests). Never goes under the new **Min core voltage** setting (default 1050 mV, the NerdQAxe++/NerdOCTAxe firmware minimum). If the firmware refuses a voltage, that's treated as the floor. A test that crashes or reboots the unit counts as a fail and the unit recovers on its own.
+3. **Clock up:** raises the clock a step at a time starting from the previous clock's minimum voltage, adding voltage only when a step fails. This traces the chip's minimum-voltage curve.
+4. **Operating point:** the fastest point whose test ran at least **Thermal headroom** (default 3°C) under both temp limits and under 95% of the power limit. The 5% clock margin now only applies when the run found the chip's actual stability edge, not when temperature, power or your cap ended it. Every rung gets +10 mV over its minimum.
+5. **Soak test:** the chosen point runs for 30 min (configurable, 0 to skip). If it slips, it drops one rung and soaks again (up to 3 times).
+
+### Also
+- Governor ladder rungs each carry their own minimum voltage, so stepping down on a hot day lowers voltage too.
+- Autotune checks your caps against the board's firmware limits before starting (e.g. NerdQAxe++ won't go above 800 MHz).
+- Abort or a BitScope restart returns to a known-good point: your starting settings during the floor search, the last passing clock (+10 mV) while climbing. A restart during the soak keeps the chosen point and hands over to the governor.
+- Results table shows the stage of each test (baseline, undervolt, clock up, soak). Baseline shows how low the voltage held.
+- New settings: Min core voltage (limits), Thermal headroom and Soak test (advanced). Existing devices get the defaults automatically.
+
+---
+
 ## v0.8.2 - 2026-11-07
 
 ### Changed

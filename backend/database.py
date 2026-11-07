@@ -28,6 +28,17 @@ def _add_missing_columns():
     """create_all() never alters existing tables. Add new nullable columns here."""
     wanted = {
         "metrics": [("vr_temp_int", "REAL")],
+        "tuner_config": [
+            ("voltage_min_mv", "INTEGER DEFAULT 1050"),
+            ("soak_minutes", "INTEGER DEFAULT 30"),
+            ("headroom_c", "REAL DEFAULT 3.0"),
+            ("stage", "TEXT"),
+            ("floor_voltage", "INTEGER"),
+            ("floor_fail_mv", "INTEGER"),
+            ("limit_detail", "TEXT"),
+            ("soak_tries", "INTEGER DEFAULT 0"),
+        ],
+        "tune_steps": [("stage", "TEXT")],
     }
     with engine.begin() as conn:
         for table, cols in wanted.items():

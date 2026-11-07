@@ -15,11 +15,14 @@ const LIMIT_FIELDS = [
   { key: 'power_max_w',    label: 'Power limit',     unit: 'W', hint: 'Keep under your PSU rating' },
   { key: 'freq_max_mhz',   label: 'Max frequency',   unit: 'MHz' },
   { key: 'voltage_max_mv', label: 'Max core voltage', unit: 'mV' },
+  { key: 'voltage_min_mv', label: 'Min core voltage', unit: 'mV', hint: 'Undervolt floor. NerdQAxe firmware won\'t go under 1050' },
 ]
 
 const ADVANCED_FIELDS = [
-  { key: 'margin_pct',             label: 'Margin below max',      unit: '%',   hint: 'Operating point = highest tested rung at or below max × (1 − margin)' },
-  { key: 'voltage_margin_mv',      label: 'Extra voltage',         unit: 'mV',  hint: 'Added to each overclocked rung above its minimum passing voltage' },
+  { key: 'margin_pct',             label: 'Margin below max',      unit: '%',   hint: 'Only when the run finds the chip\'s stability edge: operating point stays this far under it' },
+  { key: 'headroom_c',             label: 'Thermal headroom',      unit: '°C',  hint: 'Operating point must have tested at least this far under both temp limits' },
+  { key: 'soak_minutes',           label: 'Soak test',             unit: 'min', hint: 'Confirmation run at the chosen point. 0 = skip' },
+  { key: 'voltage_margin_mv',      label: 'Extra voltage',         unit: 'mV',  hint: 'Added to every rung above the lowest voltage that passed at that clock' },
   { key: 'step_mhz',               label: 'Frequency step',        unit: 'MHz' },
   { key: 'voltage_step_mv',        label: 'Voltage step',          unit: 'mV' },
   { key: 'warmup_minutes',         label: 'Warmup per step',       unit: 'min' },
@@ -30,6 +33,8 @@ const ADVANCED_FIELDS = [
   { key: 'max_hw_nonces_per_step', label: 'HW nonces allowed',     unit: '/step' },
   { key: 'min_hashrate_ratio',     label: 'Min hashrate ratio',    unit: '',    hint: '0.96 = must keep 96% of expected hashrate for the clock' },
 ]
+
+const STAGE = { baseline: 'baseline', floor: 'undervolt', climb: 'clock up', soak: 'soak' }
 
 const RESULT = {
   pass:    { color: 'green', label: 'pass' },
@@ -134,7 +139,6 @@ export default function TunerPanel({ mac, onChange }) {
   const running = t.phase === 'autotune'
   const missing = t.missing_limits || []
   const sug = t.suggestions || {}
-  const runMins = t.estimated_steps ? t.estimated_steps * t.estimated_minutes_per_step : null
 
   const inp = {
     border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '5px 8px', fontSize: 12,
@@ -154,14 +158,20 @@ export default function TunerPanel({ mac, onChange }) {
   }
 
   const startAutotune = () => {
-    const est = runMins ? `roughly ${Math.round(runMins / 60 * 10) / 10}–${Math.round(runMins * 2 / 60 * 10) / 10} h` : 'a few hours'
+    const h = m => Math.round(m / 60 * 10) / 10
+    const est = t.estimated_minutes ? `roughly ${h(t.estimated_minutes)}–${h(t.estimated_minutes * 1.5)} h` : 'a couple of hours'
     const ok = window.confirm(
       `Start autotune on this device?\n\n` +
-      `It starts from the current ${live.frequency} MHz @ ${live.core_voltage} mV and steps up ${t.step_mhz} MHz at a time, ` +
-      `adding ${t.voltage_step_mv} mV when a step isn't stable. Each step runs ${t.estimated_minutes_per_step} min, so expect ${est}.\n\n` +
+      `1. Measures the current ${live.frequency} MHz @ ${live.core_voltage} mV.\n` +
+      `2. Finds the lowest voltage that holds at that clock (not below ${t.voltage_min_mv} mV).\n` +
+      `3. Raises the clock ${t.step_mhz} MHz at a time from that voltage, adding ${t.voltage_step_mv} mV only when needed.\n` +
+      `4. Picks the fastest point that tested at least ${t.headroom_c}°C under your temp limits` +
+      `${t.soak_minutes ? ` and soak-tests it for ${t.soak_minutes} min` : ''}.\n\n` +
+      `Each test runs ${t.estimated_minutes_per_step} min; expect ${est}.\n\n` +
       `It never exceeds ${t.freq_max_mhz} MHz / ${t.voltage_max_mv} mV, and stops the moment chip ≥ ${t.temp_max}°C, ` +
       `VR ≥ ${t.vr_temp_max}°C or power ≥ ${t.power_max_w} W.\n\n` +
-      `Hashrate may dip briefly during unstable steps. Don't change clock or voltage on this unit while it runs.`
+      `While finding the voltage floor the unit may stop hashing or reboot for a minute; that's expected and it recovers. ` +
+      `Don't change clock or voltage on this unit while it runs.`
     )
     if (ok) act('autotune', () => api.tunerAutotune(mac, { govern_after: true }))
   }
@@ -204,7 +214,10 @@ export default function TunerPanel({ mac, onChange }) {
         <Point label="Operating point" freq={op?.freq} voltage={op?.voltage} theme={theme}
           sub={op && t.max_stable_freq ? `${Math.round(op.freq / t.max_stable_freq * 100)}% of max clock` : null} />
         <Point label="Baseline" freq={t.baseline_freq} voltage={t.baseline_voltage} theme={theme}
-          sub={t.factory?.frequency ? `factory ${t.factory.frequency} MHz @ ${t.factory.core_voltage} mV` : null} />
+          sub={[
+            t.floor_voltage && t.floor_voltage < t.baseline_voltage ? `holds down to ${t.floor_voltage} mV` : null,
+            t.factory?.frequency ? `factory ${t.factory.frequency} MHz @ ${t.factory.core_voltage} mV` : null,
+          ].filter(Boolean).join(' · ') || null} />
       </div>
 
       {/* Ladder */}
@@ -334,8 +347,8 @@ export default function TunerPanel({ mac, onChange }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
               <thead>
                 <tr style={{ color: theme.muted, textAlign: 'right' }}>
-                  {['MHz', 'mV', 'Hashrate', 'HW', 'Chip', 'VR', 'Power', 'W/TH', ''].map((h, i) => (
-                    <th key={i} style={{ fontWeight: 400, padding: '4px 6px', textAlign: i === 8 ? 'left' : 'right',
+                  {['Stage', 'MHz', 'mV', 'Hashrate', 'HW', 'Chip', 'VR', 'Power', 'W/TH', ''].map((h, i) => (
+                    <th key={i} style={{ fontWeight: 400, padding: '4px 6px', textAlign: i === 0 || i === 9 ? 'left' : 'right',
                       borderBottom: `0.5px solid ${theme.border}` }}>{h}</th>
                   ))}
                 </tr>
@@ -345,6 +358,7 @@ export default function TunerPanel({ mac, onChange }) {
                   const r = RESULT[s.result] || RESULT.aborted
                   return (
                     <tr key={s.id} style={{ color: theme.text, textAlign: 'right' }}>
+                      <td style={{ padding: '4px 6px', textAlign: 'left', color: theme.muted }}>{STAGE[s.stage] || '—'}</td>
                       <td style={{ padding: '4px 6px' }}>{s.frequency}</td>
                       <td style={{ padding: '4px 6px' }}>{s.core_voltage}</td>
                       <td style={{ padding: '4px 6px' }}>{s.hashrate_ratio != null ? `${fmt(s.hashrate_ratio * 100, 1)}%` : '—'}</td>

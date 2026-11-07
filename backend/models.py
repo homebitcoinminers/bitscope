@@ -198,6 +198,7 @@ class TunerConfig(SQLModel, table=True):
     freq_max_mhz: Optional[int] = None        # never request above this
     voltage_max_mv: Optional[int] = None      # never request above this
     freq_min_mhz: Optional[int] = None        # governor floor (default: baseline - 4 steps)
+    voltage_min_mv: int = 1050                # undervolt search never goes below this
 
     # ── Tuning behaviour ──────────────────────────────────────────────────────
     margin_pct: float = 5.0                   # run this % below the proven max frequency
@@ -211,6 +212,8 @@ class TunerConfig(SQLModel, table=True):
     min_hashrate_ratio: float = 0.96          # measured / expected to count as stable
     max_hw_nonces_per_step: int = 2           # duplicate HW nonces allowed per measured window
     max_error_pct: float = 1.0
+    soak_minutes: int = 30                    # confirmation run at the chosen point (0 = skip)
+    headroom_c: float = 3.0                   # chosen point's test temps must be this far under limits
 
     # ── Baseline (settings when autotune started — what "restore" goes back to) ─
     baseline_freq: Optional[int] = None
@@ -235,6 +238,11 @@ class TunerConfig(SQLModel, table=True):
     pending_apply: bool = False               # expect_* not yet pushed (device was unreachable)
     govern_after: bool = True                 # start the governor when autotune finishes
     hot_alerted: bool = False                 # "at lowest step and still hot" already sent
+    stage: Optional[str] = None               # autotune: baseline | floor | climb | soak
+    floor_voltage: Optional[int] = None       # autotune: lowest voltage that held at the baseline clock
+    floor_fail_mv: Optional[int] = None       # autotune: highest voltage known to fail there (binary search)
+    limit_detail: Optional[str] = None        # why the search stopped, in words
+    soak_tries: int = 0
     test_freq: Optional[int] = None           # autotune: point under test
     test_voltage: Optional[int] = None
     test_started_at: Optional[datetime] = None
@@ -250,6 +258,7 @@ class TuneStep(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     mac: str = Field(index=True)
     run_id: int = Field(index=True)
+    stage: Optional[str] = None               # baseline | floor | climb | soak
     frequency: int
     core_voltage: int
     started_at: datetime
