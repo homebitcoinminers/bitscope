@@ -73,13 +73,13 @@ export function SectionTitle({ children, right }) {
 export function Topbar({ title, children }) {
   const theme = useTheme()
   return (
-    <div style={{
+    <div className="bs-topbar" style={{
       background: theme.surface, borderBottom: `0.5px solid ${theme.border}`,
       padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      flexShrink: 0,
+      flexShrink: 0, gap: 8,
     }}>
-      <div style={{ fontWeight: 500, fontSize: 15, color: theme.text }}>{title}</div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>{children}</div>
+      <div style={{ fontWeight: 500, fontSize: 15, color: theme.text, whiteSpace: 'nowrap' }}>{title}</div>
+      <div className="bs-topbar-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>{children}</div>
     </div>
   )
 }

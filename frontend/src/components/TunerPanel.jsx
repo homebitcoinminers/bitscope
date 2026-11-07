@@ -53,7 +53,7 @@ const LIMITED_BY = {
 const fmt = (v, d = 0) => (v === null || v === undefined ? '—' : Number(v).toFixed(d))
 
 // warnAt / critAt are absolute values; neutral = plain accent bar (for clock)
-function Meter({ label, value, limit, unit, digits = 1, warnAt, critAt, neutral, theme }) {
+function Meter({ label, value, limit, unit, digits = 1, warnAt, critAt, neutral, note, theme }) {
   const has = value !== null && value !== undefined && limit
   const pct = has ? Math.min(100, (value / limit) * 100) : 0
   const color = !has ? theme.faint : neutral ? theme.accent
@@ -69,6 +69,7 @@ function Meter({ label, value, limit, unit, digits = 1, warnAt, critAt, neutral,
       <div style={{ height: 5, borderRadius: 3, background: theme.border, marginTop: 6, overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: color, transition: 'width .4s' }} />
       </div>
+      {note && <div style={{ fontSize: 10, color: theme.faint, marginTop: 4 }}>{note}</div>}
     </div>
   )
 }
@@ -86,7 +87,7 @@ function Point({ label, freq, voltage, sub, theme }) {
   )
 }
 
-export default function TunerPanel({ mac }) {
+export default function TunerPanel({ mac, onChange }) {
   const theme = useTheme()
   const [t, setT] = useState(null)
   const [form, setForm] = useState({})
@@ -119,7 +120,7 @@ export default function TunerPanel({ mac }) {
 
   const act = async (name, fn) => {
     setBusy(name); setError(null)
-    try { const d = await fn(); if (d) { setT(d); syncForm(d) } }
+    try { const d = await fn(); if (d) { setT(d); syncForm(d) }; onChange?.() }
     catch (e) { setError(e.message) }
     finally { setBusy(null) }
   }
@@ -186,7 +187,8 @@ export default function TunerPanel({ mac }) {
         <Meter label="Chip temp" value={live.temp} limit={t.temp_max} unit="°C" theme={theme}
           warnAt={t.temp_max - t.hysteresis_c} critAt={t.temp_max - 1} />
         <Meter label="VR temp" value={live.vr_temp} limit={t.vr_temp_max} unit="°C" theme={theme}
-          warnAt={t.vr_temp_max - t.hysteresis_c} critAt={t.vr_temp_max - 1} />
+          warnAt={t.vr_temp_max - t.hysteresis_c} critAt={t.vr_temp_max - 1}
+          note={live.vr_temp_int != null ? `external sensor · regulator internal ${fmt(live.vr_temp_int, 1)}°C` : null} />
         <Meter label="Power" value={live.power} limit={t.power_max_w} unit="W" digits={0} theme={theme}
           warnAt={t.power_max_w * 0.9} critAt={t.power_max_w} />
         <Meter label="Clock" value={live.frequency} limit={t.max_stable_freq || t.freq_max_mhz} unit="MHz"
@@ -351,7 +353,7 @@ export default function TunerPanel({ mac }) {
                       <td style={{ padding: '4px 6px' }}>{fmt(s.max_vr_temp, 1)}</td>
                       <td style={{ padding: '4px 6px' }}>{fmt(s.avg_power)}</td>
                       <td style={{ padding: '4px 6px' }}>{fmt(s.efficiency_w_th, 1)}</td>
-                      <td style={{ padding: '4px 6px', textAlign: 'left' }}>
+                      <td style={{ padding: '4px 6px', textAlign: 'left', whiteSpace: 'nowrap' }}>
                         <Badge color={r.color}>{r.label}</Badge>
                         {s.reason && <span style={{ color: theme.faint, marginLeft: 6 }}>{s.reason}</span>}
                       </td>

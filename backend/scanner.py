@@ -61,7 +61,7 @@ def parse_snapshot(mac: str, data: dict, session_id: Optional[int] = None) -> Me
         hashrate=data.get("hashRate"), hashrate_1m=data.get("hashRate_1m"),
         hashrate_10m=data.get("hashRate_10m"), hashrate_1h=data.get("hashRate_1h"),
         hashrate_1d=data.get("hashRate_1d"), expected_hashrate=data.get("expectedHashrate"),
-        temp=data.get("temp"), vr_temp=data.get("vrTemp"),
+        temp=data.get("temp"), vr_temp=data.get("vrTemp"), vr_temp_int=data.get("vrTempInt") or None,
         power=data.get("power"), voltage=data.get("voltage"), current=data.get("current"),
         core_voltage=data.get("coreVoltage"), core_voltage_actual=data.get("coreVoltageActual"),
         frequency=data.get("frequency"), fan_rpm=data.get("fanrpm"), fan2_rpm=data.get("fan2rpm"),

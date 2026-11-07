@@ -2,7 +2,7 @@
 
 Fleet management, monitoring, and QA tool for home Bitcoin miners running AxeOS — Bitaxe, NerdQAxe++, NerdOCTAxe, and compatible devices.
 
-**Current version: v0.8.0** — see [CHANGELOG.md](CHANGELOG.md) for full history.
+**Current version: v0.8.1** — see [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ---
 
@@ -62,7 +62,7 @@ BitScope is provided as-is for informational and management purposes only.
 - Offline devices are disabled in the selector — only reachable devices can be configured
 
 ### Auto-tuner
-- Opt-in per device, from the device page
+- Opt-in per device, from the device page or the **Auto-tune** page (fleet view of every device's tuner state, clock and temps against limits)
 - **Autotune** finds each chip's max stable clock: steps frequency up, adds voltage when a step isn't stable, and stops at the first clock it can't stabilise or as soon as a temp or power limit is hit
 - **Governor** runs a validated ladder below that point and moves between rungs as the room heats and cools, so the unit backs off on hot days and climbs back when it's cool
 - You set five hard limits first (chip temp, VR temp, power, max MHz, max mV); nothing exceeds them

@@ -355,7 +355,8 @@ def get_metrics(
                 null_row = {"ts": None, "hashrate": None, "temp": None, "power": None,
                             "error_percentage": None, "hashrate_1m": None, "hashrate_10m": None,
                             "hashrate_1h": None, "fan_rpm": None, "frequency": None,
-                            "core_voltage": None, "wifi_rssi": None, "duplicate_hw_nonces": None}
+                            "core_voltage": None, "wifi_rssi": None, "duplicate_hw_nonces": None,
+                            "vr_temp": None, "vr_temp_int": None}
                 result.append({**null_row, "ts": sentinel_after.strftime("%Y-%m-%dT%H:%M:%SZ")})
                 if sentinel_before > sentinel_after:
                     result.append({**null_row, "ts": sentinel_before.strftime("%Y-%m-%dT%H:%M:%SZ")})
@@ -1637,6 +1638,7 @@ def _snapshot_dict(s: MetricSnapshot) -> dict:
         "expected_hashrate": s.expected_hashrate,
         "temp": s.temp,
         "vr_temp": s.vr_temp,
+        "vr_temp_int": s.vr_temp_int,
         "power": s.power,
         "voltage": s.voltage,
         "frequency": s.frequency,

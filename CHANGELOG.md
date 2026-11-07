@@ -1,5 +1,22 @@
 # BitScope Changelog
 
+## v0.8.1 - 2026-11-07
+
+### Added
+- **Auto-tune page** (sidebar, under Manage). Lists every active device with tuner state, current clock and voltage, max stable and operating point, and chip, VR and power against each device's limits. Click a device to control its tuner on the same page.
+- **Auto-tuner column** on the Devices table (on by default). Shows the tuner state, and when the governor has backed off it shows how far (e.g. "↓ 710 of 735 MHz"). Cards view shows a tuner badge.
+- **Internal VR temperature** (`vrTempInt`, the regulator's own die sensor) is now recorded alongside the external VR sensor. It's shown under VR on the device page, as a dotted "VR int" line on the temperature chart, as an optional "VR temp (internal)" column, and on the tuner's VR meter. The tuner, alerts and thresholds still act on the external sensor, the same one the firmware uses for fan control and overheat shutdown.
+
+### Fixed
+- Page titles were hidden behind the menu button at phone width.
+- New default-on table columns now appear once after an upgrade even if you'd saved a custom column selection before. They stay hidden if you turn them off.
+- Governor no longer errors if it has no recorded time for its last change.
+
+### Database
+- New nullable column `metrics.vr_temp_int`, added automatically on startup. Existing data is untouched.
+
+---
+
 ## v0.8.0 - 2026-11-04 - Auto-tuner
 
 ### Added

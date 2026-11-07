@@ -516,7 +516,8 @@ async def _tick_governor(db: Session, cfg: TunerConfig, dev: Device):
     # Stability watchdog at the current rung: reboots or a burst of HW nonces
     # means this rung isn't as solid as the test said. Step down and retire it.
     if since_change >= cfg.warmup_minutes + 5:
-        window = _since(db, cfg.mac, max(cfg.last_change_at + timedelta(minutes=cfg.warmup_minutes),
+        changed = cfg.last_change_at or (now - timedelta(minutes=30))
+        window = _since(db, cfg.mac, max(changed + timedelta(minutes=cfg.warmup_minutes),
                                           now - timedelta(minutes=30)))
         ev = evaluate(cfg, window, cur["freq"]) if len(window) >= 5 else None
         if ev and (ev["rebooted"] or ev["hw_nonces"] > cfg.max_hw_nonces_per_step * 2) and cfg.current_index > 0:
@@ -672,6 +673,7 @@ def _serialize(db: Session, cfg: TunerConfig, dev: Device) -> dict:
             "core_voltage": _i(snap.core_voltage) if snap else None,
             "temp": snap.temp if snap else None,
             "vr_temp": snap.vr_temp if snap else None,
+            "vr_temp_int": snap.vr_temp_int if snap else None,
             "power": snap.power if snap else None,
             "hashrate": snap.hashrate if snap else None,
         },
@@ -680,10 +682,51 @@ def _serialize(db: Session, cfg: TunerConfig, dev: Device) -> dict:
 
 
 @router.get("/api/tuner")
-def tuner_summary():
+def tuner_fleet():
+    """One row per active device: tuner state plus the live readings that matter for tuning.
+    Three queries total regardless of fleet size."""
     with Session(engine) as db:
-        return {c.mac: {"phase": c.phase, "status_msg": c.status_msg, "max_stable_freq": c.max_stable_freq}
-                for c in db.exec(select(TunerConfig)).all()}
+        devices = db.exec(select(Device).where(Device.archived == False)).all()
+        cfgs = {c.mac: c for c in db.exec(select(TunerConfig)).all()}
+        macs = [d.mac for d in devices]
+        latest = {}
+        if macs:
+            sub = (select(MetricSnapshot.mac, func.max(MetricSnapshot.id).label("mid"))
+                   .where(MetricSnapshot.mac.in_(macs)).group_by(MetricSnapshot.mac).subquery())
+            for s in db.exec(select(MetricSnapshot).join(sub, MetricSnapshot.id == sub.c.mid)).all():
+                latest[s.mac] = s
+        rows = []
+        for d in devices:
+            cfg = cfgs.get(d.mac)
+            s = latest.get(d.mac)
+            lad = get_ladder(cfg) if cfg else []
+            op = lad[cfg.op_index] if cfg and lad and cfg.op_index is not None and cfg.op_index < len(lad) else None
+            rows.append({
+                "mac": d.mac,
+                "name": d.label or d.hostname or d.mac,
+                "model": d.model,
+                "online": _fresh(s),
+                "phase": cfg.phase if cfg else "idle",
+                "status_msg": cfg.status_msg if cfg else None,
+                "configured": bool(cfg) and not missing_limits(cfg),
+                "temp_max": cfg.temp_max if cfg else None,
+                "vr_temp_max": cfg.vr_temp_max if cfg else None,
+                "power_max_w": cfg.power_max_w if cfg else None,
+                "max_stable_freq": cfg.max_stable_freq if cfg else None,
+                "limited_by": cfg.limited_by if cfg else None,
+                "op_freq": op["freq"] if op else None,
+                "baseline_freq": cfg.baseline_freq if cfg else None,
+                "last_change_at": (cfg.last_change_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                                   if cfg and cfg.last_change_at else None),
+                "frequency": _i(s.frequency) if s else None,
+                "core_voltage": _i(s.core_voltage) if s else None,
+                "temp": s.temp if s else None,
+                "vr_temp": s.vr_temp if s else None,
+                "vr_temp_int": s.vr_temp_int if s else None,
+                "power": s.power if s else None,
+                "hashrate": s.hashrate if s else None,
+            })
+        return rows
 
 
 @router.get("/api/tuner/{mac}")

@@ -24,8 +24,22 @@ def _sqlite_pragmas(dbapi_conn, _):
     cur.close()
 
 
+def _add_missing_columns():
+    """create_all() never alters existing tables. Add new nullable columns here."""
+    wanted = {
+        "metrics": [("vr_temp_int", "REAL")],
+    }
+    with engine.begin() as conn:
+        for table, cols in wanted.items():
+            have = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+            for name, typ in cols:
+                if have and name not in have:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {typ}"))
+
+
 def init_db():
     SQLModel.metadata.create_all(engine)
+    _add_missing_columns()
 
     # ── Performance indexes — created if missing, no-op if already there ─────
     with engine.begin() as conn:

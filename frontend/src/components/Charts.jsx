@@ -192,8 +192,10 @@ export function TempChart({ data, threshold, height = 130 }) {
     ts: s.ts,
     'Chip':    s.temp    != null ? +s.temp.toFixed(2)    : null,
     'VR':      s.vr_temp != null ? +s.vr_temp.toFixed(2) : null,
+    'VR int':  s.vr_temp_int != null ? +s.vr_temp_int.toFixed(2) : null,
   }))
   const hasVr = chartData.some(d => d['VR'] != null)
+  const hasVrInt = chartData.some(d => d['VR int'] != null)
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
@@ -206,6 +208,7 @@ export function TempChart({ data, threshold, height = 130 }) {
         <Legend wrapperStyle={{ fontSize: 11 }} />
         <Line type="monotone" dataKey="Chip" stroke="#ef9f27" strokeWidth={1.5} dot={false} activeDot={{ r: 3 }} connectNulls={false} />
         {hasVr && <Line type="monotone" dataKey="VR" stroke="#d85a30" strokeWidth={1} dot={false} strokeDasharray="4 2" connectNulls={false} />}
+        {hasVrInt && <Line type="monotone" dataKey="VR int" stroke="#a855f7" strokeWidth={1} dot={false} strokeDasharray="1 3" connectNulls={false} />}
       </LineChart>
     </ResponsiveContainer>
   )

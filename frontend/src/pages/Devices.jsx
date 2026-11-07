@@ -34,6 +34,7 @@ const ALL_COLS = [
   // Thermal
   { key: 'temp',           label: 'ASIC temp',        group: 'Thermal',      default: true  },
   { key: 'vr_temp',        label: 'VR temp',          group: 'Thermal',      default: false },
+  { key: 'vr_temp_int',    label: 'VR temp (internal)', group: 'Thermal',    default: false },
   { key: 'max_temp_24h',   label: 'Max temp 24h',     group: 'Thermal',      default: true  },
   { key: 'hw_nonces',      label: 'HW nonces (now)',  group: 'Thermal',      default: false },
   { key: 'hw_nonce_rate',  label: 'Nonce rate /hr',   group: 'Thermal',      default: true  },
@@ -46,6 +47,7 @@ const ALL_COLS = [
   { key: 'core_v_actual',  label: 'Core V actual',    group: 'Power',        default: false },
   { key: 'efficiency',     label: 'Efficiency W/TH',  group: 'Power',        default: false },
   // Tuning
+  { key: 'tuner',          label: 'Auto-tuner',       group: 'Tuning',       default: true, since: '0.8.1' },
   { key: 'frequency',      label: 'Frequency (MHz)',  group: 'Tuning',       default: false },
   { key: 'fan',            label: 'Fan RPM',          group: 'Tuning',       default: false },
   { key: 'fan2',           label: 'Fan 2 RPM',        group: 'Tuning',       default: false },
@@ -59,13 +61,31 @@ const ALL_COLS = [
 
 const DEFAULT_COLS = ALL_COLS.filter(c => c.default).map(c => c.key)
 
+const ALL_KEYS = ALL_COLS.map(c => c.key)
+
+// Saved selections predate newer columns. Add any new default-on column exactly once,
+// so it shows up after an upgrade but stays hidden if the user later turns it off.
+function mergeNewDefaults(saved, known) {
+  const seen = Array.isArray(known) ? known : ALL_COLS.filter(c => !c.since).map(c => c.key)
+  const add = ALL_COLS.filter(c => c.default && !seen.includes(c.key) && !saved.includes(c.key)).map(c => c.key)
+  return add.length ? [...saved, ...add] : saved
+}
+
+function readKnown() {
+  try { return JSON.parse(localStorage.getItem('bs-known-cols')) } catch { return null }
+}
+
 function loadCols() {
   try {
     const saved = JSON.parse(localStorage.getItem('bs-table-cols'))
     if (!Array.isArray(saved) || saved.length === 0) return DEFAULT_COLS
     // Filter to only known column keys (drops removed ones, ignores typos)
-    const valid = saved.filter(k => ALL_COLS.some(c => c.key === k))
-    return valid.length > 0 ? valid : DEFAULT_COLS
+    const valid = saved.filter(k => ALL_KEYS.includes(k))
+    if (!valid.length) return DEFAULT_COLS
+    const merged = mergeNewDefaults(valid, readKnown())
+    localStorage.setItem('bs-table-cols', JSON.stringify(merged))
+    localStorage.setItem('bs-known-cols', JSON.stringify(ALL_KEYS))
+    return merged
   } catch {
     return DEFAULT_COLS
   }
@@ -76,6 +96,7 @@ export default function Devices() {
   const [fleet, setFleet]               = useState(null)
   const [fleetHistory, setFleetHistory] = useState([])
   const [maxTemps, setMaxTemps]         = useState({})
+  const [tuners, setTuners]             = useState({})
   const [loading, setLoading]           = useState(true)
   const [scanning, setScanning]         = useState(false)
   const [refreshing, setRefreshing]     = useState(false)
@@ -102,6 +123,7 @@ export default function Devices() {
     ])
     setDevices(devs); setFleet(stats); setFleetHistory(hist); setMaxTemps(temps)
     setLoading(false)
+    api.tunerAll().then(rows => setTuners(Object.fromEntries(rows.map(r => [r.mac, r])))).catch(() => {})
   }, [])
 
   useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t) }, [load])
@@ -110,10 +132,15 @@ export default function Devices() {
   useEffect(() => {
     api.prefs().then(prefs => {
       if (prefs['devices.cols'] && Array.isArray(prefs['devices.cols'])) {
-        const valid = prefs['devices.cols'].filter(k => ALL_COLS.some(c => c.key === k))
+        const valid = prefs['devices.cols'].filter(k => ALL_KEYS.includes(k))
         if (valid.length > 0) {
-          setVisibleCols(valid)
-          localStorage.setItem('bs-table-cols', JSON.stringify(valid))
+          const known = prefs['devices.knownCols']
+          const merged = mergeNewDefaults(valid, known)
+          setVisibleCols(merged)
+          localStorage.setItem('bs-table-cols', JSON.stringify(merged))
+          localStorage.setItem('bs-known-cols', JSON.stringify(ALL_KEYS))
+          if (merged.length !== valid.length) api.setPref('devices.cols', merged).catch(() => {})
+          if (!Array.isArray(known) || ALL_KEYS.some(k => !known.includes(k))) api.setPref('devices.knownCols', ALL_KEYS).catch(() => {})
         }
       }
       if (prefs['devices.view']) {
@@ -202,6 +229,8 @@ export default function Devices() {
       case 'ping_loss':     return v(l?.recent_ping_loss)
       case 'temp':          return v(l?.temp)
       case 'vr_temp':       return v(l?.vr_temp)
+      case 'vr_temp_int':   return v(l?.vr_temp_int)
+      case 'tuner':         return ({ autotune: 3, governor: 2, paused: 1 })[tuners[d.mac]?.phase] || 0
       case 'max_temp_24h':  return maxTemps[d.mac] || 0
       case 'hw_nonces':     return v(l?.duplicate_hw_nonces)
       case 'hw_nonce_rate': return d.hw_nonce_rate_1h || 0
@@ -245,9 +274,9 @@ export default function Devices() {
   return (
     <Page>
       {/* Topbar */}
-      <div style={{ background: theme.surface, borderBottom: `0.5px solid ${theme.border}`, padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="bs-topbar" style={{ background: theme.surface, borderBottom: `0.5px solid ${theme.border}`, padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ fontWeight: 500, fontSize: 15, color: theme.text }}>Devices</div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="bs-topbar-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {fleet && <><Badge color="green">{fleet.online} online</Badge>{fleet.offline > 0 && <Badge color="gray">{fleet.offline} offline</Badge>}</>}
           <input value={addIp} onChange={e => setAddIp(e.target.value)} onKeyDown={e => e.key === 'Enter' && addDevice()}
             placeholder="Add by IP…" style={{ border: `0.5px solid ${theme.border}`, borderRadius: 6, padding: '5px 10px', fontSize: 12, width: 130, background: theme.inputBg, color: theme.text }} />
@@ -364,10 +393,10 @@ export default function Devices() {
           </div>
         ) : view === 'table' ? (
           <DeviceTable devices={visibleDevices} cols={orderedCols} sortKey={sortKey} sortDir={sortDir}
-            onSort={changeSort} isOnline={isOnline} isArchived={isArchived} navigate={navigate} maxTemps={maxTemps} onArchiveToggle={load} />
+            onSort={changeSort} isOnline={isOnline} isArchived={isArchived} navigate={navigate} maxTemps={maxTemps} tuners={tuners} onArchiveToggle={load} />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
-            {visibleDevices.map(d => <DeviceCard key={d.mac} device={d} online={isOnline(d)} onClick={() => navigate(`/devices/${d.mac}`)} maxTemps={maxTemps} />)}
+            {visibleDevices.map(d => <DeviceCard key={d.mac} device={d} online={isOnline(d)} onClick={() => navigate(`/devices/${d.mac}`)} maxTemps={maxTemps} tuner={tuners[d.mac]} />)}
           </div>
         )}
       </div>
@@ -411,7 +440,7 @@ function FleetExpandedChart({ data, dataKey, label, color }) {
 
 // ── Table ─────────────────────────────────────────────────────────────────────
 
-function DeviceTable({ devices, cols, sortKey, sortDir, onSort, isOnline, isArchived, navigate, maxTemps, onArchiveToggle }) {
+function DeviceTable({ devices, cols, sortKey, sortDir, onSort, isOnline, isArchived, navigate, maxTemps, tuners = {}, onArchiveToggle }) {
   const theme = useTheme()
   const arrow = key => sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''
   const th = { padding: '7px 10px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: theme.muted, cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none', borderBottom: `0.5px solid ${theme.border}` }
@@ -471,6 +500,24 @@ function DeviceTable({ devices, cols, sortKey, sortDir, onSort, isOnline, isArch
       case 'ping_loss':      return online && l?.recent_ping_loss != null ? <span style={{ color: l.recent_ping_loss > 0 ? '#9a6700' : theme.muted }}>{l.recent_ping_loss.toFixed(1)}%</span> : na
       case 'temp':           return online ? fmtTemp(l?.temp) : na
       case 'vr_temp':        return online ? fmtTemp(l?.vr_temp, 70, 80) : na
+      case 'vr_temp_int':    return online ? fmtTemp(l?.vr_temp_int, 90, 105) : na
+      case 'tuner': {
+        const t = tuners[d.mac]
+        if (!t || t.phase === 'idle') return t?.max_stable_freq
+          ? <span style={{ fontSize: 11, color: theme.faint }}>off · max {t.max_stable_freq}</span> : na
+        const b = TUNER_BADGE[t.phase] || TUNER_BADGE.paused
+        const atTop = t.phase === 'governor' && t.op_freq && t.frequency === t.op_freq
+        return (
+          <div title={t.status_msg || ''}>
+            <Badge color={b.color}>{b.label}</Badge>
+            {t.phase === 'governor' && t.op_freq && (
+              <div style={{ fontSize: 10, color: atTop ? theme.faint : '#9a6700', marginTop: 2 }}>
+                {atTop ? `at ${t.op_freq} MHz` : `↓ ${t.frequency ?? '—'} of ${t.op_freq} MHz`}
+              </div>
+            )}
+          </div>
+        )
+      }
       case 'max_temp_24h': {
         const mt = maxTemps[d.mac]
         return mt ? fmtTemp(mt) : na
@@ -546,7 +593,13 @@ function DeviceTable({ devices, cols, sortKey, sortDir, onSort, isOnline, isArch
 
 // ── Card view ─────────────────────────────────────────────────────────────────
 
-function DeviceCard({ device: d, online, onClick, maxTemps }) {
+const TUNER_BADGE = {
+  autotune: { color: 'blue', label: 'autotuning' },
+  governor: { color: 'green', label: 'governor' },
+  paused:   { color: 'amber', label: 'tuner paused' },
+}
+
+function DeviceCard({ device: d, online, onClick, maxTemps, tuner }) {
   const theme = useTheme()
   const l = d.latest
   const color = !online ? theme.faint : healthColor(l)
@@ -563,6 +616,7 @@ function DeviceCard({ device: d, online, onClick, maxTemps }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
           <Badge color={online ? 'green' : 'gray'}>{online ? 'online' : 'offline'}</Badge>
           {d.active_session_id && <Badge color="blue">testing</Badge>}
+          {tuner && TUNER_BADGE[tuner.phase] && <Badge color={TUNER_BADGE[tuner.phase].color}>{TUNER_BADGE[tuner.phase].label}</Badge>}
           {d.archived && <Badge color="gray">archived</Badge>}
         </div>
       </div>

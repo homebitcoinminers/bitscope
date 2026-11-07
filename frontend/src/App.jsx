@@ -12,6 +12,7 @@ import Snapshots from './pages/Snapshots.jsx'
 import PoolChecker from './pages/PoolChecker.jsx'
 import Profiles from './pages/Profiles.jsx'
 import Configure from './pages/Configure.jsx'
+import Tuner from './pages/Tuner.jsx'
 import { api } from './api.js'
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ const NAV = [
   { to: '/sessions', label: 'Sessions', icon: ChartIcon },
   { to: '/alerts', label: 'Alerts', icon: BellIcon },
   { to: '/configure', label: 'Configure', icon: WrenchIcon },
+  { to: '/tuner', label: 'Auto-tune', icon: GaugeIcon },
   { to: '/snapshots', label: 'Snapshots', icon: CameraIcon },
   { to: '/pool-monitor', label: 'Pool Monitor', icon: PoolIcon },
   { to: '/pool-checker', label: 'Pool Checker', icon: CheckerIcon },
@@ -91,6 +93,7 @@ export default function App() {
               <Route path="/logs" element={<Logs />} />
               <Route path="/profiles" element={<Profiles />} />
               <Route path="/configure" element={<Configure />} />
+              <Route path="/tuner" element={<Tuner />} />
               <Route path="/snapshots" element={<Snapshots />} />
               <Route path="/pool-monitor" element={<PoolMonitor />} />
               <Route path="/pool-checker" element={<PoolChecker />} />
@@ -332,6 +335,9 @@ function CheckerIcon({ size = 14 }) {
 }
 function PoolIcon({ size = 14 }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm0 2a3 3 0 100 6A3 3 0 008 5z"/></svg>
+}
+function GaugeIcon({ size = 14 }) {
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2.5 11.5a6 6 0 1 1 11 0"/><path d="M8 9.5l3-3.5"/><circle cx="8" cy="9.5" r="0.9" fill="currentColor" stroke="none"/></svg>
 }
 function WrenchIcon({ size = 14 }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M10.97 1.11a.75.75 0 0 1 .82.16l1 1a.75.75 0 0 1 .16.82l-.44 1.06a2.5 2.5 0 0 1-3.22 1.37L4.5 10.29a2.5 2.5 0 1 1-2.83-2.83l4.77-4.77a2.5 2.5 0 0 1 1.37-3.22l1.06-.44zM3.5 12a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/></svg>

@@ -293,7 +293,7 @@ export default function DeviceDetail() {
                 <LiveMetric label="Hashrate" value={formatHashrate(latest.hashrate)}
                   sub={`1m: ${formatHashrate(latest.hashrate_1m)}`} />
                 <LiveMetric label="Temperature" value={latest.temp ? `${latest.temp.toFixed(1)}°C` : '—'}
-                  sub={latest.vr_temp ? `VR: ${latest.vr_temp.toFixed(1)}°C` : ''}
+                  sub={latest.vr_temp ? `VR: ${latest.vr_temp.toFixed(1)}°C${latest.vr_temp_int ? ` · int ${latest.vr_temp_int.toFixed(1)}°C` : ''}` : ''}
                   warn={latest.temp > 65} crit={latest.temp > (myThresh?.temp_max || 75)} />
                 <LiveMetric label="Power" value={latest.power ? `${latest.power.toFixed(1)} W` : '—'}
                   sub={latest.max_power ? `max: ${latest.max_power} W` : ''}
