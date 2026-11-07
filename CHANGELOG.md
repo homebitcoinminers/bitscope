@@ -1,5 +1,24 @@
 # BitScope Changelog
 
+## v0.8.0 - 2026-11-04 - Auto-tuner
+
+### Added
+- **Auto-tuner** (device page, new "Auto-tuner" card). Opt-in per device; nothing changes until you start it.
+  - **Autotune** finds the max stable clock for that specific chip. It starts from the device's current settings, steps frequency up (default 25 MHz), waits out a 2 min warmup, then measures for 10 min. If a step isn't stable it adds voltage (default 10 mV) and retries the same clock. It stops at the first clock it can't stabilise under your voltage cap, or the moment chip temp, VR temp or power hits your limit.
+  - **Stability** is judged against the baseline step: hashrate per MHz must hold at 96% or better (a chip pushed past its edge stops scaling), no reboots, at most 2 duplicate HW nonces per step, error rate at or under 1%.
+  - **Operating point** is the highest tested rung at or below max stable minus a margin (default 5%), with +10 mV over the minimum passing voltage on each overclocked rung.
+  - **Governor** rides a ladder of validated rungs below the operating point, plus untested fallback rungs (same voltage, lower clock) for hot days. Steps down when chip/VR temp gets within 1°C of a limit or power reaches its limit (at most one rung every 2 min); drops two rungs immediately if a limit is exceeded by 2°C or 5%. Steps back up only after 15 min with both temps at least 5°C under their limits and the predicted power for the next rung under 95% of the limit. A rung that reboots or throws a burst of HW nonces in service is retired.
+  - **Safety:** the five limits (chip temp, VR temp, power, max frequency, max voltage) must all be set before autotune will start, with suggestions pre-filled. Requested values are clamped to the caps in code. The tuner never touches fan settings, and the firmware's own overheat shutdown still applies. Changing clock or voltage outside the tuner pauses the governor. A BitScope restart mid-autotune aborts the run and returns to the last passing point. Changes that can't reach an offline device are retried when it comes back.
+  - Autotune results table (clock, voltage, hashrate ratio, HW nonces, peak temps, power, W/TH, result), ladder view, live headroom meters, Restore baseline button.
+  - Every change is written to the device activity log; autotune completion, failures, emergency step-downs and "still hot at lowest rung" also go to Discord.
+- API: `GET /api/tuner`, `GET /api/tuner/{mac}`, `PUT /api/tuner/{mac}/settings`, `POST /api/tuner/{mac}/autotune|abort|governor|restore`.
+- New tables `tuner_config` and `tune_steps`, created automatically on startup. No migration needed; existing data is untouched.
+
+### Fixed
+- Device page no longer overflows sideways on phones when a card holds a wide table.
+
+---
+
 ## v0.7.0 — 2026-04-09 — Performance & Maintenance
 
 ### Performance (huge improvements expected)

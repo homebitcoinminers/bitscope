@@ -53,6 +53,7 @@ from scanner import scan_and_discover, poll_all_devices, upsert_device, fetch_de
 import nonce_tracker
 from nonce_tracker import get_nonce_stats, get_nonce_history, send_daily_digest
 import pool_monitor
+import tuner
 import profiles as profile_store
 import aiohttp
 
@@ -77,6 +78,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(_check_daily_digest, "interval", minutes=5, id="digest_check")
     scheduler.add_job(_run_pool_monitor, "interval", minutes=5, id="pool_monitor")
     scheduler.add_job(_run_retention_cleanup, "interval", hours=6, id="retention_cleanup")
+    tuner.recover_on_startup()
+    scheduler.add_job(tuner.tick_all, "interval", seconds=30, id="tuner", max_instances=1, coalesce=True)
     scheduler.start()
     # Run cleanup once on startup so first-time users see immediate effect
     asyncio.create_task(asyncio.to_thread(_run_retention_cleanup))
@@ -116,6 +119,7 @@ def _run_retention_cleanup():
 
 
 app = FastAPI(title="BitScope", lifespan=lifespan)
+app.include_router(tuner.router)
 
 app.add_middleware(
     CORSMiddleware,

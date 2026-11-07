@@ -9,6 +9,7 @@ import {
   healthColor,
 } from '../components/UI.jsx'
 import { HashrateChart, MetricChart, TempChart, FanChart, AsicTempBars } from '../components/Charts.jsx'
+import TunerPanel from '../components/TunerPanel.jsx'
 
 
 const PRESET_RANGES = ['1h', '6h', '24h', '7d', '2w', '1mo', 'all']
@@ -452,6 +453,9 @@ export default function DeviceDetail() {
             )}
           </Card>
 
+          {/* Auto-tuner */}
+          <TunerPanel mac={mac} />
+
           {/* Device activity log */}
           <DeviceLogPanel alerts={deviceAlerts} />
 
@@ -786,6 +790,7 @@ function DeviceLogPanel({ alerts }) {
     if (type === 'online') return '#639922'
     if (type === 'new_device') return '#185fa5'
     if (type === 'configure_apply') return '#9333ea'
+    if (type === 'tuner' || type === 'tuning_change') return '#185fa5'
     return '#888'
   }
 
@@ -800,6 +805,8 @@ function DeviceLogPanel({ alerts }) {
     if (type === 'online') return '🟢'
     if (type === 'new_device') return '✨'
     if (type === 'configure_apply') return '⚙️'
+    if (type === 'tuner') return '🎛️'
+    if (type === 'tuning_change') return '↕️'
     return '📋'
   }
 

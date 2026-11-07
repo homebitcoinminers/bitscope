@@ -85,6 +85,15 @@ export const api = {
   setPref: (key, value) => req('PUT', `/prefs/${encodeURIComponent(key)}`, { value }),
   deletePref: (key) => req('DELETE', `/prefs/${encodeURIComponent(key)}`),
 
+  // Auto-tuner
+  tunerAll: () => req('GET', '/tuner'),
+  tuner: (mac) => req('GET', `/tuner/${mac}`),
+  tunerSettings: (mac, body) => req('PUT', `/tuner/${mac}/settings`, body),
+  tunerAutotune: (mac, body = {}) => req('POST', `/tuner/${mac}/autotune`, body),
+  tunerAbort: (mac) => req('POST', `/tuner/${mac}/abort`, {}),
+  tunerGovernor: (mac, enable) => req('POST', `/tuner/${mac}/governor`, { enable }),
+  tunerRestore: (mac) => req('POST', `/tuner/${mac}/restore`, {}),
+
   // Maintenance
   maintenanceStats: () => req('GET', '/maintenance/stats'),
   maintenanceCleanup: () => req('POST', '/maintenance/cleanup', {}),

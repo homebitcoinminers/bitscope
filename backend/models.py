@@ -183,3 +183,85 @@ class UIPref(SQLModel, table=True):
     key: str = Field(primary_key=True)
     value: str                       # JSON-encoded value
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class TunerConfig(SQLModel, table=True):
+    """Per-device auto-tuner: safety limits, discovered ladder, and live state."""
+    __tablename__ = "tuner_config"
+    mac: str = Field(primary_key=True)
+
+    # ── Safety limits (user-set; autotune refuses to start until all are set) ──
+    temp_max: Optional[float] = None          # chip temp ceiling (°C)
+    vr_temp_max: Optional[float] = None       # VR temp ceiling (°C)
+    power_max_w: Optional[float] = None       # PSU / board power ceiling (W)
+    freq_max_mhz: Optional[int] = None        # never request above this
+    voltage_max_mv: Optional[int] = None      # never request above this
+    freq_min_mhz: Optional[int] = None        # governor floor (default: baseline - 4 steps)
+
+    # ── Tuning behaviour ──────────────────────────────────────────────────────
+    margin_pct: float = 5.0                   # run this % below the proven max frequency
+    voltage_margin_mv: int = 10               # extra mV added at the operating point
+    step_mhz: int = 25
+    voltage_step_mv: int = 10
+    warmup_minutes: int = 2                   # ignored after each change
+    settle_minutes: int = 10                  # measured window per autotune step
+    hysteresis_c: float = 5.0                 # must be this far under limits to step up
+    up_hold_minutes: int = 15                 # min time at a step before stepping up
+    min_hashrate_ratio: float = 0.96          # measured / expected to count as stable
+    max_hw_nonces_per_step: int = 2           # duplicate HW nonces allowed per measured window
+    max_error_pct: float = 1.0
+
+    # ── Baseline (settings when autotune started — what "restore" goes back to) ─
+    baseline_freq: Optional[int] = None
+    baseline_voltage: Optional[int] = None
+    baseline_hr_per_mhz: Optional[float] = None   # measured GH/s per MHz at baseline
+
+    # ── Results ───────────────────────────────────────────────────────────────
+    max_stable_freq: Optional[int] = None
+    max_stable_voltage: Optional[int] = None
+    limited_by: Optional[str] = None          # stability | thermal | power | freq_cap | voltage_cap
+    ladder: Optional[str] = None              # JSON [{"freq":..,"voltage":..,"tested":bool}], low → high
+    op_index: Optional[int] = None            # ladder index of the operating point (top the governor may use)
+    last_run_id: Optional[int] = None
+
+    # ── Live state ────────────────────────────────────────────────────────────
+    phase: str = "idle"                       # idle | autotune | governor | paused
+    current_index: Optional[int] = None       # governor's current ladder index
+    last_change_at: Optional[datetime] = None
+    expect_freq: Optional[int] = None         # what we last asked the device for
+    expect_voltage: Optional[int] = None
+    mismatch_polls: int = 0
+    pending_apply: bool = False               # expect_* not yet pushed (device was unreachable)
+    govern_after: bool = True                 # start the governor when autotune finishes
+    hot_alerted: bool = False                 # "at lowest step and still hot" already sent
+    test_freq: Optional[int] = None           # autotune: point under test
+    test_voltage: Optional[int] = None
+    test_started_at: Optional[datetime] = None
+    pass_freq: Optional[int] = None           # autotune: last passing point
+    pass_voltage: Optional[int] = None
+    status_msg: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class TuneStep(SQLModel, table=True):
+    """One measured point during an autotune run."""
+    __tablename__ = "tune_steps"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    mac: str = Field(index=True)
+    run_id: int = Field(index=True)
+    frequency: int
+    core_voltage: int
+    started_at: datetime
+    ended_at: Optional[datetime] = None
+    samples: int = 0
+    avg_hashrate: Optional[float] = None
+    expected_hashrate: Optional[float] = None
+    hashrate_ratio: Optional[float] = None
+    max_temp: Optional[float] = None
+    max_vr_temp: Optional[float] = None
+    avg_power: Optional[float] = None
+    efficiency_w_th: Optional[float] = None
+    hw_nonces: Optional[int] = None
+    error_pct: Optional[float] = None
+    result: str = "running"                   # running | pass | fail | thermal | power | aborted
+    reason: Optional[str] = None

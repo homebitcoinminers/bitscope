@@ -2,7 +2,7 @@
 
 Fleet management, monitoring, and QA tool for home Bitcoin miners running AxeOS — Bitaxe, NerdQAxe++, NerdOCTAxe, and compatible devices.
 
-**Current version: v0.6.6** — see [CHANGELOG.md](CHANGELOG.md) for full history.
+**Current version: v0.8.0** — see [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ---
 
@@ -60,6 +60,14 @@ BitScope is provided as-is for informational and management purposes only.
 - Fan control: Manual or Auto Fan Control (PID) — uses correct NerdQAxe++ field names (`autofanspeed=2`, `manualFanSpeed`, `pidTargetTemp`)
 - Two-step confirmation for hardware changes
 - Offline devices are disabled in the selector — only reachable devices can be configured
+
+### Auto-tuner
+- Opt-in per device, from the device page
+- **Autotune** finds each chip's max stable clock: steps frequency up, adds voltage when a step isn't stable, and stops at the first clock it can't stabilise or as soon as a temp or power limit is hit
+- **Governor** runs a validated ladder below that point and moves between rungs as the room heats and cools, so the unit backs off on hot days and climbs back when it's cool
+- You set five hard limits first (chip temp, VR temp, power, max MHz, max mV); nothing exceeds them
+- Never touches fan settings; firmware overheat shutdown remains the final backstop
+- Pauses itself if clock/voltage are changed elsewhere; Restore baseline puts the original settings back
 
 ### Profiles
 - Saved pool / system / hardware profiles

@@ -54,3 +54,7 @@ input, select, textarea {
   .bs-topbar-actions { flex-wrap: wrap; gap: 4px !important; }
   .bs-topbar-actions button, .bs-topbar-actions span { font-size: 11px !important; }
 }
+
+/* Grid columns default to min-width:auto, so a wide table inside one (e.g. the
+   tuner results) would stretch the column past the viewport instead of scrolling. */
+.bs-two-col > * { min-width: 0; }
