@@ -1,5 +1,14 @@
 # BitScope Changelog
 
+## v0.8.2 - 2026-11-07
+
+### Changed
+- **Faster autotune:** each step now takes 5 min by default (1 min warmup + 4 min measured, about 8 polls) instead of 12. Devices still on the old 2 + 10 defaults are moved over once on startup; custom timings are left alone. Both are still adjustable per device under Auto-tuner → Limits & settings → Advanced.
+- **Max frequency cap is tested exactly.** The last step now lands on your cap even when it isn't a whole number of steps from the start (e.g. 600 → 725 → 735 with 25 MHz steps). Previously the run stopped at 725.
+- **No frequency margin when your cap ends the run.** If every step up to your cap passes, the cap becomes the operating point (with the usual +10 mV). The margin only applies when the run found the chip's real limit (stability, temperature or power).
+
+---
+
 ## v0.8.1 - 2026-11-07
 
 ### Added

@@ -37,9 +37,25 @@ def _add_missing_columns():
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {typ}"))
 
 
+def _run_once(key: str, sql: str):
+    """Run a data migration exactly once, tracked by a marker row in ui_prefs."""
+    with engine.begin() as conn:
+        done = conn.execute(text("SELECT 1 FROM ui_prefs WHERE key = :k"), {"k": key}).first()
+        if done:
+            return
+        conn.execute(text(sql))
+        conn.execute(text("INSERT INTO ui_prefs (key, value, updated_at) VALUES (:k, 'true', CURRENT_TIMESTAMP)"),
+                     {"k": key})
+
+
 def init_db():
     SQLModel.metadata.create_all(engine)
     _add_missing_columns()
+    # v0.8.2: autotune steps default to 5 min (1 warmup + 4 measured). Move devices that
+    # still have the old untouched 2 + 10 defaults; custom timings are left alone.
+    _run_once("_migration.tuner_step_5min",
+              "UPDATE tuner_config SET warmup_minutes = 1, settle_minutes = 4 "
+              "WHERE warmup_minutes = 2 AND settle_minutes = 10")
 
     # ── Performance indexes — created if missing, no-op if already there ─────
     with engine.begin() as conn:

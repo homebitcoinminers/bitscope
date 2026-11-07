@@ -222,9 +222,13 @@ def judge(cfg: TunerConfig, ev: dict, is_baseline: bool) -> tuple[bool, Optional
 
 # ── Ladder ───────────────────────────────────────────────────────────────────
 
-def build_ladder(cfg: TunerConfig, steps: list[TuneStep]) -> tuple[list[dict], int]:
+def build_ladder(cfg: TunerConfig, steps: list[TuneStep], limited_by: Optional[str] = None) -> tuple[list[dict], int]:
     """Validated points ≤ the operating point, plus untested lower fallbacks.
-    Returns (ladder low→high, op_index)."""
+    Returns (ladder low→high, op_index).
+
+    The frequency margin backs off from the chip's real edge. If the run stopped at
+    the user's own frequency cap, that edge was never reached, so the cap itself is
+    the operating point (it still gets the extra voltage margin)."""
     passing = {}
     for s in steps:
         if s.result == "pass":
@@ -232,8 +236,11 @@ def build_ladder(cfg: TunerConfig, steps: list[TuneStep]) -> tuple[list[dict], i
                 passing[s.frequency] = s.core_voltage
     freqs = sorted(passing)
     top = freqs[-1]
-    target = top * (1 - cfg.margin_pct / 100.0)
-    op_freq = max([f for f in freqs if f <= target], default=freqs[0])
+    if limited_by == "freq_cap":
+        op_freq = top
+    else:
+        target = top * (1 - cfg.margin_pct / 100.0)
+        op_freq = max([f for f in freqs if f <= target], default=freqs[0])
 
     ladder = []
     for f in freqs:
@@ -306,7 +313,7 @@ async def _finish_autotune(db: Session, cfg: TunerConfig, dev: Device, limited_b
         await _discord(a, cfg.mac)
         return
 
-    ladder, op_idx = build_ladder(cfg, steps)
+    ladder, op_idx = build_ladder(cfg, steps, limited_by)
     top = max((s for s in steps if s.result == "pass"), key=lambda s: s.frequency)
     cfg.max_stable_freq, cfg.max_stable_voltage = top.frequency, top.core_voltage
     cfg.limited_by = limited_by
@@ -393,10 +400,11 @@ async def _tick_autotune(db: Session, cfg: TunerConfig, dev: Device):
             ev["hashrate_ratio"] = 1.0
         _close_step(db, step, "pass", None, ev)
         cfg.pass_freq, cfg.pass_voltage = cfg.test_freq, cfg.test_voltage
-        nxt = cfg.test_freq + cfg.step_mhz
-        if nxt > cfg.freq_max_mhz:
-            await _finish_autotune(db, cfg, dev, "freq_cap", f"reached your {cfg.freq_max_mhz} MHz cap")
+        if cfg.test_freq >= cfg.freq_max_mhz:
+            await _finish_autotune(db, cfg, dev, "freq_cap", f"stable at your {cfg.freq_max_mhz} MHz cap")
             return
+        # Last step lands exactly on the cap (e.g. 725 → 735 with 25 MHz steps)
+        nxt = min(cfg.test_freq + cfg.step_mhz, cfg.freq_max_mhz)
         await _start_test(db, cfg, dev, nxt, cfg.test_voltage)
         return
 
